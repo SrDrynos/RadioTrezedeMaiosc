@@ -1,5 +1,5 @@
 
-import { NewsItem, Program, SiteSettings, SongRequest, ContactMessage, User, UserRole } from '../types';
+import { NewsItem, Program, SiteSettings, SongRequest, ContactMessage, User, UserRole, ListenerSession } from '../types';
 
 const STORAGE_KEYS = {
   NEWS: 'radio_13_news',
@@ -8,7 +8,8 @@ const STORAGE_KEYS = {
   REQUESTS: 'radio_13_requests',
   SETTINGS: 'radio_13_settings',
   MESSAGES: 'radio_13_messages',
-  USERS: 'radio_13_users'
+  USERS: 'radio_13_users',
+  SESSIONS: 'radio_13_active_sessions' // New Key for Tracking
 };
 
 const DEFAULT_SETTINGS: SiteSettings = {
@@ -133,6 +134,12 @@ export const db = {
       const admin: User = { id: '1', name: 'Administrador', email: 'drynos.com@gmail.com', role: UserRole.ADMIN };
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify([admin]));
     }
+    
+    // Sessions Init (Clear old on refresh to prevent ghosts in this demo)
+    // In production with real backend, this wouldn't be cleared here.
+    if (!localStorage.getItem(STORAGE_KEYS.SESSIONS)) {
+        localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify([]));
+    }
   },
 
   getSettings: (): SiteSettings => {
@@ -244,5 +251,24 @@ export const db = {
     const messages = db.getMessages();
     messages.unshift(msg);
     localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
+  },
+
+  // --- NEW SESSION TRACKING METHODS ---
+  getSessions: (): ListenerSession[] => {
+      return JSON.parse(localStorage.getItem(STORAGE_KEYS.SESSIONS) || '[]');
+  },
+
+  addSession: (session: ListenerSession) => {
+      const sessions = db.getSessions();
+      // Remove existing if duplicate IP to prevent spam in demo
+      const filtered = sessions.filter(s => s.ip !== session.ip);
+      filtered.push(session);
+      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(filtered));
+  },
+
+  removeSession: (id: string) => {
+      const sessions = db.getSessions();
+      const filtered = sessions.filter(s => s.id !== id);
+      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(filtered));
   }
 };

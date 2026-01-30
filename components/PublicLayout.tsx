@@ -25,6 +25,7 @@ const PublicLayout: React.FC = () => {
     newAudio.preload = 'none';
     setAudio(newAudio);
 
+    // Cleanup on unmount
     return () => {
       if (newAudio) {
         newAudio.pause();
@@ -43,6 +44,28 @@ const PublicLayout: React.FC = () => {
     }
   }, [location.pathname, audio]); // Check on nav
 
+  // NEW: Server-Side Tracking via PHP
+  const trackListener = async () => {
+      // Check session storage to avoid spamming the tracker on every play/pause in same session
+      if (sessionStorage.getItem('radio_tracked_session')) return;
+
+      try {
+          const deviceType = /Mobi|Android/i.test(navigator.userAgent) ? 'Celular' : 'Computador';
+          // Calls the PHP script in the public folder
+          const response = await fetch(`./tracker.php?device=${deviceType}`);
+          
+          if (response.ok) {
+              const result = await response.json();
+              if (result.success) {
+                  console.log("Ouvinte rastreado via servidor:", result.data.city);
+                  sessionStorage.setItem('radio_tracked_session', 'true');
+              }
+          }
+      } catch (e) {
+          console.warn("Tracking indisponível (Dev mode ou erro de rede):", e);
+      }
+  };
+
   const togglePlay = () => {
     if (!audio) return;
     if (isPlaying) {
@@ -52,6 +75,8 @@ const PublicLayout: React.FC = () => {
         console.error("Playback failed:", error);
         alert("Não foi possível iniciar o player. Verifique sua conexão.");
       });
+      // Trigger Tracking
+      trackListener();
     }
     setIsPlaying(!isPlaying);
   };
@@ -96,7 +121,6 @@ const PublicLayout: React.FC = () => {
         <div className="container mx-auto px-4 py-2 flex justify-between items-center relative z-50 bg-white">
           {/* Logo Area */}
           <Link to="/" className="flex items-center gap-3 group hover:scale-105 transition duration-300">
-             {/* Increased height classes: h-20 md:h-24 */}
              <RadioLogo src={settings.logoUrl} className="h-20 md:h-24 w-auto drop-shadow-md py-1" />
           </Link>
 
@@ -209,10 +233,10 @@ const PublicLayout: React.FC = () => {
                     {isPlaying ? <Pause fill="currentColor" size={24} /> : <Play fill="currentColor" className="ml-1" size={24} />}
                 </button>
                 <div className="hidden md:block">
-                    <p className="text-xs text-green-400 font-black tracking-widest uppercase mb-0.5">
+                    <p className="text-sm font-bold uppercase mb-0.5">{settings.radioName}</p>
+                    <p className="text-xs text-green-400 font-black tracking-widest uppercase">
                       {isPlaying ? <span className="animate-pulse">● AO VIVO</span> : 'PAUSADO'}
                     </p>
-                    <p className="text-sm font-bold uppercase">{settings.radioName}</p>
                 </div>
             </div>
 

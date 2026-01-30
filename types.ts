@@ -76,6 +76,19 @@ export interface ContactMessage {
   date: string;
 }
 
+export interface ListenerSession {
+  id: string;
+  ip: string;
+  city: string;
+  region: string;
+  country: string;
+  lat: number;
+  lng: number;
+  isp: string;
+  connectedAt: string;
+  device: string;
+}
+
 export enum UserRole {
   ADMIN = 'ADMIN',
   EDITOR = 'EDITOR'

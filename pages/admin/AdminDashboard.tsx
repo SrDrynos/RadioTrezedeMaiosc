@@ -1,10 +1,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { db } from '../../services/db';
-import { SongRequest } from '../../types';
+import { ListenerSession } from '../../types';
 import { 
-    Music, Users, Activity, ArrowUp, 
-    Wifi, Radio, Clock, Smartphone, Monitor, Tablet, Globe, Disc, Mic2, Server, MapPin, Laptop
+    Music, Users, Activity, Radio, Mic2, Server, MapPin, Laptop, Signal, Navigation, Target, Globe, Wifi, RefreshCw, AlertTriangle, Monitor, Smartphone, Search
 } from 'lucide-react';
 
 interface StreamData {
@@ -22,386 +21,556 @@ interface StreamData {
   capa_musica: string;
 }
 
-interface UserLocation {
-  ip: string;
+interface LocationData {
+  method: 'GPS' | 'IP';
+  lat: number;
+  lng: number;
+  accuracy?: number;
+  street: string;
+  number: string;
+  neighborhood: string;
   city: string;
   region: string;
-  country: string;
+  full_address: string;
+  isp?: string;
+  ip?: string; // Tracking the IP of the focus target
 }
 
 const AdminDashboard: React.FC = () => {
-  // Database Data
-  const [requestCount, setRequestCount] = useState(0);
-  
-  // Real Stream Data
   const [streamData, setStreamData] = useState<StreamData | null>(null);
-  const [loadingStream, setLoadingStream] = useState(true);
   
-  // Real User Location (Site Traffic)
-  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  // Advanced Tracking State
+  const [location, setLocation] = useState<LocationData | null>(null);
+  const [trackingStatus, setTrackingStatus] = useState<'idle' | 'searching' | 'locked' | 'error' | 'denied'>('idle');
+  const [trackingErrorMsg, setTrackingErrorMsg] = useState('');
   
-  // Metrics for Chart
+  // Listeners Data
   const [listeners, setListeners] = useState(0);
   const [peakListeners, setPeakListeners] = useState(0);
-  const [capacityPct, setCapacityPct] = useState(0);
-
-  // Chart History (Initialize with zeros)
-  const [historyData, setHistoryData] = useState<number[]>(new Array(24).fill(0));
+  const [historyData, setHistoryData] = useState<number[]>(new Array(30).fill(0));
+  
+  // Web Sessions (Real Tracked Users from Server)
+  const [activeSessions, setActiveSessions] = useState<ListenerSession[]>([]);
 
   useEffect(() => {
-    // Load DB Data
-    const reqs = db.getRequests();
-    setRequestCount(reqs.filter(r => r.status === 'pending').length);
-
-    // Initial Fetch
+    // 1. Start Systems
+    initializeGPS();
     fetchStreamData();
-    fetchUserLocation();
 
-    // Polling Interval for Stream (Every 15 seconds)
-    const interval = setInterval(fetchStreamData, 15000);
-
-    return () => clearInterval(interval);
+    // 3. Loops
+    const streamInterval = setInterval(fetchStreamData, 10000); // 10s updates
+    
+    return () => {
+        clearInterval(streamInterval);
+    };
   }, []);
 
-  const fetchUserLocation = async () => {
-      try {
-          const res = await fetch('https://ipapi.co/json/');
-          const data = await res.json();
-          setUserLocation({
-              ip: data.ip,
-              city: data.city,
-              region: data.region_code,
-              country: data.country_name
-          });
-      } catch (error) {
-          console.error("Erro ao buscar localização do usuário", error);
+  const initializeGPS = () => {
+      setTrackingStatus('searching');
+      setTrackingErrorMsg('');
+
+      if (!navigator.geolocation) {
+          setTrackingStatus('error');
+          setTrackingErrorMsg('Seu navegador não suporta geolocalização GPS.');
+          fallbackToIP();
+          return;
       }
+
+      navigator.geolocation.getCurrentPosition(
+          async (position) => {
+              const { latitude, longitude, accuracy } = position.coords;
+              
+              // Reverse Geocoding (Lat/Lng -> Endereço Real)
+              try {
+                  // Using OpenStreetMap Nominatim for detailed address
+                  const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
+                  const geoData = await geoRes.json();
+                  const addr = geoData.address || {};
+                  
+                  // Ensure all fields are strings to avoid Object Rendering Error
+                  const street = String(addr.road || addr.pedestrian || addr.street || "Rua não identificada");
+                  const houseNumber = String(addr.house_number || "S/N");
+                  const suburb = String(addr.suburb || addr.neighbourhood || addr.residential || "");
+                  const city = String(addr.city || addr.town || addr.village || "");
+                  const state = String(addr.state_code || addr.state || "");
+
+                  const fullAddress = String(geoData.display_name || "");
+
+                  setLocation({
+                      method: 'GPS',
+                      lat: latitude,
+                      lng: longitude,
+                      accuracy: Math.round(accuracy),
+                      street: street,
+                      number: houseNumber,
+                      neighborhood: suburb,
+                      city: city,
+                      region: state,
+                      full_address: fullAddress,
+                      isp: 'Conexão Local Segura'
+                  });
+                  setTrackingStatus('locked');
+              } catch (e) {
+                  console.error("Erro na conversão de endereço", e);
+                  // Fallback se a API de endereço falhar, mas temos coordenadas
+                  setLocation({
+                      method: 'GPS',
+                      lat: latitude,
+                      lng: longitude,
+                      accuracy: Math.round(accuracy),
+                      street: `Lat: ${latitude.toFixed(5)}`,
+                      number: "",
+                      neighborhood: `Lng: ${longitude.toFixed(5)}`,
+                      city: "Coordenadas Brutas",
+                      region: "",
+                      full_address: "Endereço não pôde ser resolvido pelo servidor de mapas.",
+                      isp: 'Conexão Local Segura'
+                  });
+                  setTrackingStatus('locked');
+              }
+          },
+          (error) => {
+              console.warn("Erro GPS:", error);
+              if (error.code === 1) {
+                  setTrackingStatus('denied');
+                  setTrackingErrorMsg('Permissão de GPS negada pelo usuário.');
+              } else if (error.code === 2) {
+                  setTrackingStatus('error');
+                  setTrackingErrorMsg('Sinal de GPS indisponível no local.');
+              } else {
+                  setTrackingStatus('error');
+                  setTrackingErrorMsg('Tempo limite esgotado ao buscar satélites.');
+              }
+              fallbackToIP();
+          },
+          { 
+              enableHighAccuracy: true, // CRITICAL: Forces GPS hardware usage
+              timeout: 20000, 
+              maximumAge: 0 
+          }
+      );
+  };
+
+  const fallbackToIP = async () => {
+      try {
+          const ipRes = await fetch('https://ipwho.is/');
+          const ipData = await ipRes.json();
+          
+          if (ipData.success) {
+              setLocation({
+                  method: 'IP',
+                  lat: ipData.latitude,
+                  lng: ipData.longitude,
+                  accuracy: 5000, // IP is imprecise
+                  street: "Localização Aproximada (Baseada em IP)",
+                  number: "",
+                  neighborhood: "",
+                  city: String(ipData.city || ""),
+                  region: String(ipData.region || ""),
+                  full_address: `${ipData.city} - ${ipData.region}, ${ipData.country}`,
+                  isp: String(ipData.connection?.isp || ipData.isp || "Provedor Desconhecido")
+              });
+          }
+      } catch (e) {
+          console.error("IP Geo failed", e);
+      }
+  };
+
+  // Allows admin to click on a listener and see their location on map
+  const trackListener = (session: ListenerSession) => {
+      setLocation({
+          method: 'IP',
+          lat: session.lat,
+          lng: session.lng,
+          accuracy: 1000,
+          street: "Ouvinte Web",
+          number: "IP Rastreável",
+          neighborhood: "Acesso via Site",
+          city: String(session.city),
+          region: String(session.region),
+          full_address: `${session.city} - ${session.region}, ${session.country}`,
+          isp: String(session.isp),
+          ip: session.ip
+      });
+      // Scroll top
+      window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const fetchStreamData = async () => {
     try {
-        // Using AllOrigins proxy to avoid Mixed Content (HTTP API on HTTPS site)
         const apiUrl = 'http://radio.linknacional.com/api-json/Njk4Misx';
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(apiUrl)}`;
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`;
         
         const res = await fetch(proxyUrl);
-        const data: StreamData = await res.json();
+        if (!res.ok) throw new Error('Network error');
         
-        setStreamData(data);
-        setLoadingStream(false);
-
-        // Update Logic
-        const currentListeners = parseInt(data.ouvintes_conectados) || 0;
-        const maxListeners = parseInt(data.plano_ouvintes) || 1000;
+        const rawData = await res.json();
         
-        setListeners(currentListeners);
-        setCapacityPct(Math.round((currentListeners / maxListeners) * 100));
+        // --- FETCH REAL LISTENERS FROM PHP SERVER LOG ---
+        let sessions: ListenerSession[] = [];
+        try {
+            // Try fetching local JSON (Generated by PHP)
+            const logRes = await fetch('./listeners_log.json?t=' + Date.now()); // Prevent Cache
+            if (logRes.ok) {
+                sessions = await logRes.json();
+            } else {
+                // Fallback to localStorage (Dev Mode or First Run)
+                sessions = db.getSessions();
+            }
+        } catch (e) {
+            console.warn("Could not fetch server logs, using local", e);
+            sessions = db.getSessions();
+        }
 
-        // Update History
-        setHistoryData(prev => {
-            const newData = [...prev.slice(1), currentListeners];
-            return newData;
-        });
+        // Sanitization of Server Data
+        const safeSessions = sessions.map(s => ({
+            ...s,
+            city: String(s.city || 'Desconhecido'),
+            region: String(s.region || ''),
+            country: String(s.country || ''),
+            isp: String(s.isp || 'Provedor Oculto')
+        }));
+
+        setActiveSessions(safeSessions);
+
+        // SANITIZATION: Ensure NO objects are passed to state to prevent React Error #31
+        const safeData: StreamData = {
+            status: String(rawData.status || 'OFFLINE'),
+            porta: String(rawData.porta || ''),
+            porta_dj: String(rawData.porta_dj || ''),
+            ip: String(rawData.ip || ''),
+            ouvintes_conectados: String(rawData.ouvintes_conectados || '0'),
+            titulo: String(rawData.titulo || ''),
+            plano_ouvintes: String(rawData.plano_ouvintes || ''),
+            plano_bitrate: String(rawData.plano_bitrate || ''),
+            // Handle cases where API returns {} for empty image/music fields
+            musica_atual: (typeof rawData.musica_atual === 'object' ? '' : String(rawData.musica_atual || '')),
+            proxima_musica: (typeof rawData.proxima_musica === 'object' ? '' : String(rawData.proxima_musica || '')),
+            genero: String(rawData.genero || ''),
+            capa_musica: (typeof rawData.capa_musica === 'object' ? '' : String(rawData.capa_musica || ''))
+        };
+        
+        setStreamData(safeData);
+
+        // Logic: Listener Count is max of (Stream Reported) vs (Web Sessions)
+        // Usually Stream Report includes web sessions, but just in case.
+        const streamCount = parseInt(safeData.ouvintes_conectados) || 0;
+        const total = Math.max(streamCount, safeSessions.length);
+
+        setListeners(total);
+        if (total > peakListeners) setPeakListeners(total);
+
+        setHistoryData(prev => [...prev.slice(1), total]);
 
     } catch (error) {
-        console.error("Erro ao buscar dados do streaming:", error);
+        console.error("Stream Fetch Error", error);
     }
   };
 
-  // Update peak separately
-  useEffect(() => {
-      if (listeners > peakListeners) setPeakListeners(listeners);
-  }, [listeners, peakListeners]);
+  // SVG Chart Generators
+  const getPolylinePoints = (data: number[], width: number, height: number) => {
+      const max = Math.max(...data, 5) * 1.2;
+      const step = width / (data.length - 1);
+      return data.map((val, i) => `${i * step},${height - (val / max) * height}`).join(' ');
+  };
 
-  // Helper for Chart
-  const getSvgPath = (data: number[], height: number, width: number) => {
-      const max = Math.max(...data, 10) * 1.2;
-      const stepX = width / (data.length - 1);
-      const points = data.map((val, index) => {
-          const x = index * stepX;
-          const y = height - (val / max) * height;
-          return `${x},${y}`;
-      });
-      return `M0,${height} L${points.join(' L')} L${width},${height} Z`;
-  };
-  
-  const getLinePath = (data: number[], height: number, width: number) => {
-      const max = Math.max(...data, 10) * 1.2;
-      const stepX = width / (data.length - 1);
-      return `M` + data.map((val, index) => {
-          const x = index * stepX;
-          const y = height - (val / max) * height;
-          return `${x},${y}`;
-      }).join(' L');
-  };
+  // Safe accessor for status to prevent crash
+  const streamStatus = String(streamData?.status || 'OFFLINE');
+  const isOnline = streamStatus.toLowerCase().includes('ligada') || streamStatus.toLowerCase().includes('transmitindo');
+
+  // Calculate "Hidden" listeners (Stream Count - Identified Web Sessions)
+  const unknownListenersCount = Math.max(0, listeners - activeSessions.length);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans pb-10">
         
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 border-b border-slate-200 pb-6">
-            <div>
-                <h1 className="text-2xl font-bold text-slate-800">Visão Geral Unificada</h1>
-                <p className="text-slate-500 text-sm mt-1">
-                    Monitoramento Site (IP) + Rádio (Streaming)
-                </p>
+        {/* TOP STATUS BAR */}
+        <div className="bg-slate-900 text-white p-4 rounded-xl shadow-lg flex flex-col md:flex-row justify-between items-center gap-4 border border-slate-700">
+            <div className="flex items-center gap-3">
+                <div className="relative">
+                    <div className={`w-3 h-3 rounded-full absolute top-0 right-0 ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+                    <Radio size={24} className="text-slate-300" />
+                </div>
+                <div>
+                    <h1 className="text-lg font-bold leading-none tracking-tight">CENTRAL DE COMANDO</h1>
+                    <p className="text-xs text-slate-400 font-mono mt-1 flex items-center gap-2">
+                        <Server size={10} /> SERVER: {streamData?.ip || '...'} : {streamData?.porta || '...'}
+                    </p>
+                </div>
             </div>
-            <div className="flex gap-3">
-                 <div className="bg-white px-3 py-1.5 rounded-md border border-slate-200 flex items-center gap-2 text-xs font-semibold text-slate-600 shadow-sm">
-                    <span className={`w-2 h-2 rounded-full ${streamData?.status.toLowerCase().includes('ligada') || streamData?.status.toLowerCase().includes('transmitindo') ? "bg-green-500" : "bg-red-500"}`}></span>
-                    Status: {streamData?.status || 'Carregando...'}
-                 </div>
-                 <div className="bg-blue-50 px-3 py-1.5 rounded-md border border-blue-100 flex items-center gap-2 text-xs font-semibold text-blue-700 shadow-sm">
-                    <Radio size={14} />
-                    {streamData ? `${streamData.plano_bitrate}` : '...'}
-                 </div>
-            </div>
-        </div>
-
-        {/* Top KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
-            {/* Card 1: Listeners */}
-            <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wider">Ouvintes Conectados</h3>
-                    <Users size={16} className="text-blue-500" />
+            <div className="flex gap-4 text-center">
+                <div className="px-4 border-r border-slate-700">
+                    <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Status da Rádio</div>
+                    <div className={`font-bold text-sm ${isOnline ? 'text-green-400' : 'text-red-400'}`}>
+                        {streamStatus.toUpperCase()}
+                    </div>
                 </div>
-                <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-slate-800">{listeners}</span>
-                    <span className="text-xs font-medium text-slate-400">
-                        / {streamData?.plano_ouvintes || '...'} máx
-                    </span>
-                </div>
-                <div className="mt-3 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${Math.max(capacityPct, 5)}%` }}></div>
-                </div>
-            </div>
-
-            {/* Card 2: Peak */}
-            <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wider">Pico de Audiência</h3>
-                    <Activity size={16} className="text-purple-500" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-slate-800">{peakListeners}</span>
-                    <span className="text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded flex items-center">
-                        <ArrowUp size={10} className="mr-0.5" /> Sessão Atual
-                    </span>
-                </div>
-                <p className="text-xs text-slate-400 mt-2">Recorde desta sessão administrativa</p>
-            </div>
-
-            {/* Card 3: User Location (New) */}
-            <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wider">Seu Acesso (IP)</h3>
-                    <MapPin size={16} className="text-orange-500" />
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-lg font-bold text-slate-800 truncate">
-                        {userLocation ? `${userLocation.city}, ${userLocation.region}` : 'Localizando...'}
-                    </span>
-                    <span className="text-xs text-slate-500 font-mono mt-1">
-                        IP: {userLocation?.ip || '...'}
-                    </span>
-                </div>
-            </div>
-
-            {/* Card 4: Requests */}
-            <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wider">Pedidos Musicais</h3>
-                    <Music size={16} className="text-green-500" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-slate-800">{requestCount}</span>
-                    <span className="text-xs text-slate-400">pendentes</span>
-                </div>
-                <div className="mt-3 flex gap-1">
-                     {[1,2,3,4,5].map(i => (
-                         <div key={i} className={`h-1 flex-1 rounded-full ${i <= requestCount ? 'bg-green-500' : 'bg-slate-100'}`}></div>
-                     ))}
+                <div className="px-4">
+                    <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Bitrate</div>
+                    <div className="font-bold text-blue-400 text-sm">{streamData?.plano_bitrate || '128'} kbps</div>
                 </div>
             </div>
         </div>
 
-        {/* Main Analytics Chart Area */}
+        {/* MAIN TRACKING AREA */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            {/* Main Graph (Listeners over time) */}
-            <div className="lg:col-span-2 bg-white p-6 rounded-lg border border-slate-200 shadow-sm">
-                <div className="flex justify-between items-center mb-6">
-                    <div>
-                        <h3 className="text-lg font-bold text-slate-800">Audiência da Rádio (Tempo Real)</h3>
-                        <p className="text-sm text-slate-500">Monitoramento de ouvintes conectados ao servidor</p>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-slate-400">
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                        </span>
-                        Ao Vivo
+            {/* LEFT: MAP & LOCATION */}
+            <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[500px]">
+                <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm uppercase">
+                        <Target size={18} className="text-red-600" /> 
+                        Rastreamento em Mapa
+                    </h3>
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={initializeGPS} 
+                            className="p-1.5 bg-white border border-slate-300 rounded hover:bg-slate-100 text-slate-600 transition"
+                            title="Voltar para Minha Localização"
+                        >
+                            <RefreshCw size={14} className={trackingStatus === 'searching' ? 'animate-spin' : ''} />
+                        </button>
                     </div>
                 </div>
 
-                <div className="relative h-64 w-full">
-                    <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
-                        <defs>
-                            <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.2" />
-                                <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-                            </linearGradient>
-                        </defs>
-                        <path d={getSvgPath(historyData, 100, 100)} fill="url(#chartGradient)" />
-                        <path d={getLinePath(historyData, 100, 100)} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <div className="absolute top-0 left-0 h-full flex flex-col justify-between text-xs text-slate-400 pointer-events-none -ml-6">
-                        <span>{Math.max(...historyData, 10) * 1.2}</span>
-                        <span>0</span>
-                    </div>
+                <div className="relative flex-1 bg-slate-200 w-full group">
+                    {location ? (
+                        <>
+                            {/* GOOGLE MAPS IFRAME */}
+                            <iframe 
+                                width="100%" 
+                                height="100%" 
+                                frameBorder="0" 
+                                scrolling="no" 
+                                marginHeight={0} 
+                                marginWidth={0} 
+                                title="Tracking Map"
+                                // Dynamic Zoom: IP locations (1000m accuracy) get zoom 13, GPS gets 19
+                                src={`https://maps.google.com/maps?q=${location.lat},${location.lng}&z=${location.accuracy && location.accuracy > 100 ? 13 : 19}&output=embed`}
+                                className="filter grayscale-[20%] group-hover:grayscale-0 transition duration-700"
+                            ></iframe>
+                            
+                            {/* PRECISION OVERLAY */}
+                            <div className="absolute top-4 left-4 bg-black/80 text-white p-3 rounded-lg backdrop-blur-md border border-white/10 shadow-xl max-w-xs">
+                                <div className="text-[10px] text-green-400 uppercase font-bold tracking-wider mb-1 flex items-center gap-1">
+                                    <Signal size={10} /> Precisão: {location.accuracy ? `+/- ${location.accuracy}m` : 'Baixa (IP)'}
+                                </div>
+                                <div className="font-mono text-xl font-bold tracking-tight text-white mb-1">
+                                    {location.lat.toFixed(6)}
+                                </div>
+                                <div className="font-mono text-xl font-bold tracking-tight text-white">
+                                    {location.lng.toFixed(6)}
+                                </div>
+                            </div>
+
+                            {/* ADDRESS CARD */}
+                            <div className="absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl p-5 border-t-4 border-blue-600 shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                             <div className="bg-blue-100 text-blue-700 p-1 rounded">
+                                                <MapPin size={16} />
+                                             </div>
+                                             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                                 {location.method === 'GPS' ? 'Meu GPS' : 'Local do Ouvinte (IP)'}
+                                             </span>
+                                        </div>
+                                        
+                                        <div>
+                                            <h2 className="text-xl font-black text-slate-800 leading-none">
+                                                {location.street} {location.number ? `, ${location.number}` : ''}
+                                            </h2>
+                                            <p className="text-slate-600 font-medium mt-1">
+                                                {location.neighborhood} • {location.city}/{location.region}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="hidden md:block text-right border-l border-slate-200 pl-6">
+                                        <div className="text-xs text-slate-400 mb-1">PROVEDOR / ISP</div>
+                                        <div className="font-bold text-slate-700">{location.isp || 'Detectando...'}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-100">
+                             <div className="relative">
+                                <div className="absolute inset-0 bg-blue-400 rounded-full animate-ping opacity-20"></div>
+                                <Navigation size={48} className="relative z-10 text-blue-500 animate-pulse" />
+                             </div>
+                             <p className="mt-4 font-bold text-slate-500">Inicializando Mapa...</p>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* Now Playing Section */}
-            <div className="bg-white p-0 rounded-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wide">No Ar Agora</h3>
-                    <Mic2 size={16} className="text-blue-500" />
-                </div>
+            {/* RIGHT: STATS & GRAPH */}
+            <div className="space-y-6 flex flex-col">
                 
-                <div className="p-6 flex-1 flex flex-col items-center justify-center text-center">
-                    {loadingStream ? (
-                         <div className="animate-pulse flex flex-col items-center w-full">
-                             <div className="w-32 h-32 bg-slate-200 rounded-lg mb-4"></div>
-                             <div className="h-4 bg-slate-200 rounded w-3/4 mb-2"></div>
-                         </div>
-                    ) : (
-                        <>
-                            <div className="relative w-40 h-40 mb-6 group">
-                                <img 
-                                    src={streamData?.capa_musica && streamData.capa_musica !== 'sem_imagem' ? streamData.capa_musica : 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400'} 
-                                    alt="Capa do Álbum" 
-                                    className="w-full h-full object-cover rounded-xl shadow-lg group-hover:scale-105 transition-transform duration-500"
-                                    onError={(e) => {
-                                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400';
-                                    }}
-                                />
-                                <div className="absolute inset-0 bg-black/20 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Disc size={32} className="text-white animate-spin-slow" />
-                                </div>
-                            </div>
-                            
-                            <h4 className="text-lg font-bold text-slate-800 line-clamp-2">
-                                {streamData?.musica_atual || 'Desconhecido'}
-                            </h4>
-                            <p className="text-sm text-slate-500 mt-1 mb-4">
-                                {streamData?.genero ? `${streamData.genero}` : 'Rádio Ao Vivo'}
-                            </p>
-                        </>
-                    )}
+                {/* BIG LISTENER COUNTER */}
+                <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl shadow-lg p-6 text-white relative overflow-hidden flex-1 min-h-[160px] flex flex-col justify-center">
+                    <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+                    <div className="relative z-10">
+                        <div className="flex items-center justify-between mb-4">
+                            <span className="text-blue-100 font-bold text-xs uppercase tracking-widest border border-blue-400/30 px-2 py-1 rounded">Ao Vivo</span>
+                            <Users className="text-blue-200" />
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-6xl font-black tracking-tighter">{listeners}</span>
+                            <span className="text-lg text-blue-200 font-medium">Ouvintes</span>
+                        </div>
+                        <div className="mt-4 text-xs text-blue-200 font-medium flex items-center gap-2 bg-black/20 w-fit px-3 py-1.5 rounded-full">
+                            <Activity size={12} /> Pico da Sessão: <span className="text-white font-bold">{peakListeners}</span>
+                        </div>
+                    </div>
                 </div>
-                <div className="border-t border-slate-100 bg-slate-50 p-4">
-                     <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Próxima (AutoDJ)</p>
-                     <p className="text-sm text-slate-700 truncate">
-                        {streamData?.proxima_musica || 'Programação Ao Vivo'}
-                     </p>
+
+                {/* GRAPH */}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex-1">
+                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Audiência (Tempo Real)</h4>
+                    <div className="h-28 w-full flex items-end">
+                        <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
+                            <polyline
+                                fill="none"
+                                stroke="#2563eb"
+                                strokeWidth="2"
+                                points={getPolylinePoints(historyData, 100, 100)}
+                                vectorEffect="non-scaling-stroke"
+                            />
+                            <path 
+                                d={`M0,100 ${getPolylinePoints(historyData, 100, 100).replace(/ /g, ' L')} L100,100 Z`} 
+                                fill="rgba(37, 99, 235, 0.1)" 
+                            />
+                        </svg>
+                    </div>
+                </div>
+
+                {/* NOW PLAYING MINI */}
+                <div className="bg-slate-900 rounded-xl shadow-md p-4 flex items-center gap-4 border border-slate-700 text-white">
+                     <div className="w-14 h-14 bg-slate-800 rounded-lg overflow-hidden flex-shrink-0 relative border border-slate-600">
+                        <img 
+                            src={streamData?.capa_musica && streamData.capa_musica !== 'sem_imagem' ? streamData.capa_musica : 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400'} 
+                            className="w-full h-full object-cover opacity-80"
+                            alt=""
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                           <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping"></div>
+                        </div>
+                     </div>
+                     <div className="overflow-hidden">
+                         <div className="text-[10px] text-green-400 font-bold uppercase tracking-wider mb-1">Tocando Agora</div>
+                         <div className="font-bold text-sm truncate leading-tight text-slate-100">{streamData?.musica_atual || 'Carregando...'}</div>
+                         <div className="text-xs text-slate-500 mt-1">{streamData?.genero || 'Ao Vivo'}</div>
+                     </div>
                 </div>
             </div>
         </div>
 
-        {/* Unified Locations & Devices */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* Merged Traffic Source: Site (Your IP) + Radio (API Total) */}
-            <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800">Origem de Tráfego (Site + Rádio)</h3>
-                    <Globe size={16} className="text-slate-400" />
+        {/* DETAILED LISTENER LIST */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-slate-50/50">
+                <div>
+                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                        <Globe size={20} className="text-blue-600" />
+                        Mapa de Conexões Ativas
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">Sessões monitoradas via Site & Servidor de Streaming</p>
                 </div>
-                <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
-                        <tr>
-                            <th className="px-4 py-3 font-semibold">Origem</th>
-                            <th className="px-4 py-3 font-semibold">Local / Cidade</th>
-                            <th className="px-4 py-3 font-semibold text-right">Ouvintes</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {/* 1. Real User Location from IP */}
-                        <tr className="bg-blue-50/50">
-                            <td className="px-4 py-3 flex items-center gap-2 font-bold text-blue-700">
-                                <Laptop size={14} /> Site (Você)
-                            </td>
-                            <td className="px-4 py-3 text-slate-700 font-medium">
-                                {userLocation ? `${userLocation.city}, ${userLocation.region}` : 'Detectando...'}
-                            </td>
-                            <td className="px-4 py-3 text-right font-bold text-slate-900">
-                                1 <span className="text-xs font-normal text-slate-500">(Online)</span>
-                            </td>
-                        </tr>
-
-                        {/* 2. Radio Stream Distribution (Total from API, distributed as estimate) */}
-                        {[
-                            { name: 'Treze de Maio', pct: 0.65 },
-                            { name: 'Tubarão', pct: 0.20 },
-                            { name: 'Jaguaruna', pct: 0.10 },
-                            { name: 'Outros', pct: 0.05 },
-                        ].map((city, idx) => {
-                            const count = Math.round(listeners * city.pct);
-                            if (count === 0 && listeners > 0 && idx === 0) return null; // Hide if 0 but radio is playing
-                            return (
-                                <tr key={idx} className="hover:bg-slate-50 transition">
-                                    <td className="px-4 py-3 flex items-center gap-2 text-slate-500">
-                                        <Radio size={14} /> Rádio
-                                    </td>
-                                    <td className="px-4 py-3 text-slate-700">
-                                        {city.name}
-                                    </td>
-                                    <td className="px-4 py-3 text-right text-slate-600 font-medium">
-                                        {count}
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
             </div>
 
-            {/* Devices (Stats) */}
-            <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800">Dispositivos</h3>
-                </div>
-                <div className="p-6 space-y-6">
-                    <div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span className="flex items-center gap-2 text-slate-600 font-medium"><Smartphone size={16} /> Mobile (App/Site)</span>
-                            <span className="text-slate-900 font-bold">82%</span>
-                        </div>
-                        <div className="w-full bg-slate-100 rounded-full h-2">
-                            <div className="bg-indigo-600 h-2 rounded-full" style={{ width: '82%' }}></div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span className="flex items-center gap-2 text-slate-600 font-medium"><Monitor size={16} /> Desktop (PC)</span>
-                            <span className="text-slate-900 font-bold">15%</span>
-                        </div>
-                        <div className="w-full bg-slate-100 rounded-full h-2">
-                            <div className="bg-blue-500 h-2 rounded-full" style={{ width: '15%' }}></div>
-                        </div>
-                    </div>
+            <table className="w-full text-left">
+                <thead className="bg-white text-slate-500 text-[10px] uppercase tracking-wider font-bold border-b border-slate-200">
+                    <tr>
+                        <th className="px-6 py-4">Dispositivo / Tipo</th>
+                        <th className="px-6 py-4">Endereço / Cidade</th>
+                        <th className="px-6 py-4">Status de Rastreio</th>
+                        <th className="px-6 py-4 text-right">Ação</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
                     
-                    <div className="pt-4 border-t border-slate-100">
-                        <p className="text-xs text-slate-400">
-                            * Dados de dispositivos são estatísticos baseados na média histórica do player.
-                        </p>
-                    </div>
-                </div>
-            </div>
+                    {/* 1. ACTIVE WEB SESSIONS (REAL TRACKING FROM PHP LOGS) */}
+                    {activeSessions.map((session, idx) => (
+                         <tr key={session.id} className="hover:bg-blue-50 transition cursor-pointer group" onClick={() => trackListener(session)}>
+                            <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-blue-100 p-2 rounded-full text-blue-700 shadow-sm">
+                                        {session.device === 'Celular' ? <Smartphone size={18} /> : <Monitor size={18} />}
+                                    </div>
+                                    <div>
+                                        <div className="font-black text-slate-800">Ouvinte Web #{idx + 1}</div>
+                                        <div className="text-xs text-slate-500 font-mono flex items-center gap-1">
+                                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                                            Acesso pelo Site
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td className="px-6 py-4">
+                                <div className="font-bold text-slate-800">
+                                    {session.city}, {session.region}
+                                </div>
+                                <div className="text-xs text-slate-500 mt-0.5">
+                                    ISP: {session.isp}
+                                </div>
+                            </td>
+                            <td className="px-6 py-4">
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold">
+                                    <Target size={12} /> RASTREADO (IP)
+                                </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                                <button className="inline-flex items-center gap-1 text-white bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs font-bold transition">
+                                    <Search size={12} /> RASTREAR
+                                </button>
+                            </td>
+                        </tr>
+                    ))}
+
+                    {/* 2. UNKNOWN LISTENERS (STREAMING SERVER LEFTOVERS) */}
+                    {Array.from({ length: Math.max(0, unknownListenersCount) }).map((_, idx) => (
+                        <tr key={`unknown-${idx}`} className="hover:bg-slate-50 transition opacity-60">
+                            <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-slate-100 p-2 rounded-full text-slate-400">
+                                        <Radio size={18} />
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-slate-600">Ouvinte Remoto #{idx + 1}</div>
+                                        <div className="text-xs text-slate-400 font-mono">App Externo / Player Direto</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td className="px-6 py-4">
+                                <div className="font-medium text-slate-400 italic">Localização Oculta</div>
+                                <div className="text-xs text-slate-400 mt-1 max-w-[200px] leading-tight">
+                                    Conectado diretamente ao servidor de áudio (Sem GPS).
+                                </div>
+                            </td>
+                            <td className="px-6 py-4">
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 border border-slate-200 text-slate-500 text-xs font-bold">
+                                    <Server size={12} /> STREAM
+                                </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                                <div className="inline-flex items-center gap-1 text-slate-400 font-bold text-xs">
+                                    <Signal size={12} /> ONLINE
+                                </div>
+                            </td>
+                        </tr>
+                    ))}
+
+                    {listeners === 0 && (
+                         <tr>
+                            <td colSpan={4} className="p-8 text-center text-slate-400">
+                                Nenhuma conexão ativa detectada no momento.
+                            </td>
+                        </tr>
+                    )}
+                </tbody>
+            </table>
         </div>
     </div>
   );
