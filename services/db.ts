@@ -26,7 +26,9 @@ const DEFAULT_SETTINGS: SiteSettings = {
   aboutImageUrl: 'https://images.unsplash.com/photo-1478737270239-2f02b77ac6d5?q=80&w=1920&auto=format&fit=crop',
   rssUrls: [
     // Default Google News RSS for Treze de Maio
-    'https://news.google.com/rss/search?q=Treze+de+Maio+Santa+Catarina&hl=pt-BR&gl=BR&ceid=BR:pt-419'
+    'https://news.google.com/rss/search?q=Treze+de+Maio+Santa+Catarina&hl=pt-BR&gl=BR&ceid=BR:pt-419',
+    // Folha Regional Web TV (Fonte Regional)
+    'https://folharegionalwebtv.com/feed'
   ],
   apiUrl: '',
   apiKey: ''
@@ -44,62 +46,30 @@ const DEFAULT_NEWS: NewsItem[] = [
   {
     id: '1',
     title: 'Festa do Agricultor atrai multidão',
+    subtitle: 'Evento superou expectativas de público no parque de exposições',
     excerpt: 'Evento tradicional movimentou o final de semana na cidade com desfiles e exposições.',
     content: 'A tradicional Festa do Agricultor de Treze de Maio superou as expectativas este ano. Mais de 5 mil pessoas passaram pelo parque de exposições para prestigiar o desfile de máquinas agrícolas, as exposições de produtos coloniais e os shows regionais. O prefeito destacou a importância do evento para a economia local.',
-    category: 'Cidade',
+    category: 'Treze de Maio - SC',
     imageUrl: 'https://images.unsplash.com/photo-1625246333195-5848b4491178?q=80&w=1000&auto=format&fit=crop',
+    gallery: ['https://images.unsplash.com/photo-1625246333195-5848b4491178?q=80&w=1000&auto=format&fit=crop'],
     createdAt: new Date().toISOString(),
-    published: true
+    published: true,
+    source: 'Assessoria de Imprensa',
+    slug: 'festa-do-agricultor-atrai-multidao'
   },
   {
     id: '2',
     title: 'Obras na estrada geral avançam',
+    subtitle: 'Pavimentação deve ser entregue antes do prazo previsto',
     excerpt: 'Pavimentação asfáltica deve ser concluída até o próximo mês, segundo a prefeitura.',
     content: 'As obras de pavimentação que ligam o centro às comunidades do interior estão 80% concluídas. O prefeito visitou o local nesta manhã e garantiu que o cronograma está em dia. A melhoria vai facilitar o escoamento da produção agrícola e o transporte escolar.',
     category: 'Região',
     imageUrl: 'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?q=80&w=1000&auto=format&fit=crop',
+    gallery: ['https://images.unsplash.com/photo-1541888946425-d81bb19240f5?q=80&w=1000&auto=format&fit=crop'],
     createdAt: new Date(Date.now() - 86400000).toISOString(),
-    published: true
-  },
-  {
-    id: '3',
-    title: 'Campanha de Vacinação contra a Gripe inicia nesta segunda',
-    excerpt: 'Todas as unidades de saúde estarão abertas das 8h às 17h para grupos prioritários.',
-    content: 'A Secretaria de Saúde de Treze de Maio informa que a campanha de vacinação contra a Influenza começa nesta segunda-feira. Idosos acima de 60 anos e crianças menores de 5 anos devem comparecer ao posto de saúde central ou nas unidades dos bairros. É obrigatório apresentar a carteirinha de vacinação e o cartão do SUS.',
-    category: 'Avisos',
-    imageUrl: 'https://images.unsplash.com/photo-1632053009626-3f1396a92849?q=80&w=1000&auto=format&fit=crop',
-    createdAt: new Date(Date.now() - 172800000).toISOString(),
-    published: true
-  },
-  {
-    id: '4',
-    title: 'Final do Campeonato Municipal de Futebol é adiada',
-    excerpt: 'Devido às fortes chuvas, a partida decisiva acontecerá no próximo domingo.',
-    content: 'O Departamento de Esportes comunica que a grande final do Campeonato Municipal, prevista para este domingo, foi transferida para a próxima semana. A decisão visa preservar o gramado do Estádio Municipal e garantir a segurança dos jogadores e torcedores. O horário permanece o mesmo: 15h30.',
-    category: 'Cidade',
-    imageUrl: 'https://images.unsplash.com/photo-1579952363873-27f3bde9be51?q=80&w=1000&auto=format&fit=crop',
-    createdAt: new Date(Date.now() - 259200000).toISOString(),
-    published: true
-  },
-  {
-    id: '5',
-    title: 'Castelo Belvedere recebe visita de escolas da região',
-    excerpt: 'Ponto turístico de Treze de Maio é destaque em projeto educativo sobre história local.',
-    content: 'Nesta semana, o Castelo Belvedere recebeu mais de 200 alunos de escolas municipais de Tubarão e Jaguaruna. O projeto visa valorizar a arquitetura e a história da colonização local. Os alunos puderam conhecer o interior da capela e desfrutar da vista panorâmica da cidade.',
-    category: 'Região',
-    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Castelo_Belvedere_Treze_de_Maio_SC_01.jpg/600px-Castelo_Belvedere_Treze_de_Maio_SC_01.jpg',
-    createdAt: new Date(Date.now() - 345600000).toISOString(),
-    published: true
-  },
-  {
-    id: '6',
-    title: 'Comunicado: Interrupção no abastecimento de água',
-    excerpt: 'Bairro Centro e São Gabriel ficarão sem água para manutenção na rede.',
-    content: 'A companhia de águas informa que haverá corte no abastecimento nesta quarta-feira, das 13h às 17h, para reparos emergenciais na tubulação principal. Recomendamos que os moradores economizem água durante o período. O abastecimento deve normalizar até o início da noite.',
-    category: 'Avisos',
-    imageUrl: 'https://plus.unsplash.com/premium_photo-1661910006766-3d2b2721869f?q=80&w=1000&auto=format&fit=crop',
-    createdAt: new Date(Date.now() - 432000000).toISOString(),
-    published: true
+    published: true,
+    source: 'Secretaria de Obras',
+    slug: 'obras-na-estrada-geral-avancam'
   }
 ];
 
@@ -122,8 +92,6 @@ export const db = {
             }
 
             // Fix 2: CLEANUP OLD BASE64 LOGO
-            // This detects if the user has the old "hardcoded" base64 logo saved and clears it.
-            // This forces the app to use the RadioLogo component SVG which is consistent everywhere.
             const OLD_DEFAULT_START = "data:image/svg+xml;base64,PHN2Zy";
             if (current.logoUrl && current.logoUrl.startsWith(OLD_DEFAULT_START)) {
                 current.logoUrl = "";
@@ -135,7 +103,6 @@ export const db = {
                 current.rssUrls = DEFAULT_SETTINGS.rssUrls; // Restore default RSS if missing
                 updated = true;
             } else if (current.rssUrls.length === 0) {
-                 // Suggest default if empty for testing
                  current.rssUrls = DEFAULT_SETTINGS.rssUrls;
                  updated = true;
             }
@@ -144,6 +111,12 @@ export const db = {
             if (current.apiUrl === undefined) {
                 current.apiUrl = '';
                 updated = true;
+            }
+
+            // Fix 5: Add Folha Regional if missing
+            if (current.rssUrls && !current.rssUrls.includes('https://folharegionalwebtv.com/feed')) {
+                 current.rssUrls.push('https://folharegionalwebtv.com/feed');
+                 updated = true;
             }
 
             if (updated) {
@@ -162,6 +135,18 @@ export const db = {
     const storedNews = JSON.parse(localStorage.getItem(STORAGE_KEYS.NEWS) || '[]');
     if (storedNews.length === 0 || storedNews.length <= 2) {
       localStorage.setItem(STORAGE_KEYS.NEWS, JSON.stringify(DEFAULT_NEWS));
+    } else {
+      // Migration for new fields
+      const updatedNews = storedNews.map((n: any) => ({
+          ...n,
+          subtitle: n.subtitle || '',
+          gallery: n.gallery || (n.imageUrl ? [n.imageUrl] : []),
+          source: n.source || 'Redação'
+      }));
+      // Check if migration needed
+      if (!storedNews[0].gallery) {
+          localStorage.setItem(STORAGE_KEYS.NEWS, JSON.stringify(updatedNews));
+      }
     }
 
     if (!localStorage.getItem(STORAGE_KEYS.USERS)) {

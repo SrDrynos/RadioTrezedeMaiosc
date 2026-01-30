@@ -2,13 +2,18 @@
 export interface NewsItem {
   id: string;
   title: string;
-  excerpt: string;
+  subtitle?: string; // New: Journalistic subtitle
+  slug?: string; // New: SEO friendly URL part
+  excerpt: string; // Mini description (SEO)
   content: string; // Can be HTML now
-  category: 'Cidade' | 'Região' | 'Avisos';
-  imageUrl: string;
+  category: 'Treze de Maio - SC' | 'Região' | 'Avisos'; // Enforce strict category
+  imageUrl: string; // Main Thumbnail
+  gallery?: string[]; // New: Up to 5 images
+  videoUrl?: string; // New: YouTube/Social link
   createdAt: string;
   published: boolean;
-  source?: string; // Optional source attribution
+  source?: string; // Mandatory source name
+  sourceUrl?: string; // Optional source link
   tags?: string[];
 }
 
