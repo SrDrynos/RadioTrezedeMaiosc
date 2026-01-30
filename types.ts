@@ -15,6 +15,7 @@ export interface NewsItem {
   source?: string; // Mandatory source name
   sourceUrl?: string; // Optional source link
   tags?: string[];
+  rejectionReason?: string; // New: Reason why AI rejected it
 }
 
 export interface IncomingWebhookData {
@@ -62,6 +63,9 @@ export interface SiteSettings {
   // New Backend/Database Integration Fields
   apiUrl?: string; 
   apiKey?: string;
+  // Social Media
+  facebookUrl?: string;
+  instagramUrl?: string;
 }
 
 export interface ContactMessage {

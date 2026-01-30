@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../../services/db';
 import { SiteSettings } from '../../types';
-import { Save, Upload, Image as ImageIcon, Trash2, AlertCircle, Rss, Plus, Database, Server, Key, Info, Camera } from 'lucide-react';
+import { Save, Upload, Image as ImageIcon, Trash2, AlertCircle, Rss, Plus, Database, Server, Key, Info, Share2 } from 'lucide-react';
 import { RadioLogo } from '../../components/RadioLogo';
 
 const AdminSettings: React.FC = () => {
@@ -151,7 +151,6 @@ const AdminSettings: React.FC = () => {
   if (!settings) return null;
 
   const isBase64Logo = settings.logoUrl?.startsWith('data:');
-  const isBase64About = settings.aboutImageUrl?.startsWith('data:');
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -239,79 +238,6 @@ const AdminSettings: React.FC = () => {
                             />
                         </div>
                     </div>
-                </div>
-            </section>
-
-             {/* 2. About Image Settings */}
-             <section>
-                <h3 className="text-lg font-bold text-blue-900 border-b pb-2 mb-4 flex items-center gap-2">
-                    <Camera size={20} /> 2. Imagem da Página "A Rádio"
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                    <div>
-                         <label className="block text-sm font-medium text-gray-700 mb-2">Pré-visualização</label>
-                         <div className="bg-gray-100 p-2 rounded-lg flex items-center justify-center border border-gray-300 min-h-[200px] overflow-hidden relative">
-                             {settings.aboutImageUrl ? (
-                                <img src={settings.aboutImageUrl} alt="Sobre" className="w-full h-48 object-cover rounded" />
-                             ) : (
-                                <div className="text-gray-400 text-sm">Sem imagem selecionada</div>
-                             )}
-                         </div>
-                    </div>
-                    <div className="space-y-6">
-                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                            <label className="block text-sm font-bold text-blue-900 mb-2">Enviar Foto</label>
-                            <div className="flex items-center gap-2">
-                                <label className={`cursor-pointer bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold flex items-center transition shadow-sm ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
-                                    <Upload size={18} className="mr-2" /> 
-                                    {isProcessing ? 'Processando...' : 'Carregar Foto'}
-                                    <input 
-                                        type="file" 
-                                        accept="image/*" 
-                                        onChange={(e) => handleImageUpload(e, 'aboutImageUrl')} 
-                                        className="hidden" 
-                                        disabled={isProcessing}
-                                    />
-                                </label>
-                                {settings.aboutImageUrl && !isProcessing && (
-                                    <button 
-                                        type="button" 
-                                        onClick={() => handleRemoveImage('aboutImageUrl')}
-                                        className="text-red-500 hover:text-red-700 p-2 border border-red-100 hover:border-red-200 bg-white rounded transition"
-                                        title="Remover imagem"
-                                    >
-                                        <Trash2 size={20} />
-                                    </button>
-                                )}
-                            </div>
-                            <p className="text-xs text-blue-700 mt-2">
-                                Ideal: Foto da equipe ou estúdio.
-                            </p>
-                        </div>
-
-                         {/* URL Fallback */}
-                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Ou Link Externo (URL)</label>
-                            <input 
-                                type="text" 
-                                value={isBase64About ? '' : settings.aboutImageUrl || ''} 
-                                onChange={e => setSettings({...settings, aboutImageUrl: e.target.value})}
-                                placeholder={isBase64About ? "(Imagem carregada via upload)" : "https://..."}
-                                disabled={isBase64About}
-                                className={`w-full border border-gray-300 p-2 rounded text-sm ${isBase64About ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                            />
-                        </div>
-                    </div>
-                </div>
-                
-                <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Texto Institucional</label>
-                    <textarea 
-                        rows={6}
-                        value={settings.aboutText} 
-                        onChange={e => setSettings({...settings, aboutText: e.target.value})}
-                        className="w-full border border-gray-300 p-2 rounded"
-                    />
                 </div>
             </section>
 
@@ -474,6 +400,44 @@ const AdminSettings: React.FC = () => {
                             onChange={e => setSettings({...settings, address: e.target.value})}
                             className="w-full border border-gray-300 p-2 rounded"
                         />
+                </div>
+
+                {/* Social Media Links - NEW SECTION */}
+                <div className="mt-6 border-t border-gray-100 pt-4">
+                     <h4 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2"><Share2 size={16} /> Redes Sociais</h4>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Facebook URL</label>
+                            <input 
+                                type="text" 
+                                value={settings.facebookUrl || ''} 
+                                onChange={e => setSettings({...settings, facebookUrl: e.target.value})}
+                                placeholder="https://facebook.com/..."
+                                className="w-full border border-gray-300 p-2 rounded"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Instagram URL</label>
+                            <input 
+                                type="text" 
+                                value={settings.instagramUrl || ''} 
+                                onChange={e => setSettings({...settings, instagramUrl: e.target.value})}
+                                placeholder="https://instagram.com/..."
+                                className="w-full border border-gray-300 p-2 rounded"
+                            />
+                        </div>
+                     </div>
+                </div>
+
+                <div className="mt-6 border-t border-gray-100 pt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Texto Institucional (Sobre a Rádio)</label>
+                    <textarea 
+                        rows={6}
+                        value={settings.aboutText} 
+                        onChange={e => setSettings({...settings, aboutText: e.target.value})}
+                        className="w-full border border-gray-300 p-2 rounded"
+                        placeholder="Descreva a história e missão da rádio..."
+                    />
                 </div>
             </section>
 

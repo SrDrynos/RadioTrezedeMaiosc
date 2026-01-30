@@ -3,6 +3,7 @@ import { NewsItem, Program, SiteSettings, SongRequest, ContactMessage, User, Use
 
 const STORAGE_KEYS = {
   NEWS: 'radio_13_news',
+  REJECTED_NEWS: 'radio_13_rejected_news', 
   PROGRAMS: 'radio_13_programs',
   REQUESTS: 'radio_13_requests',
   SETTINGS: 'radio_13_settings',
@@ -10,14 +11,10 @@ const STORAGE_KEYS = {
   USERS: 'radio_13_users'
 };
 
-// We leave this empty to force the usage of the <RadioLogo /> internal SVG.
-// This ensures the logo is always high-quality vector and identical across the app.
-const DEFAULT_LOGO = ""; 
-
 const DEFAULT_SETTINGS: SiteSettings = {
   streamUrl: 'http://stm4.xradios.com.br:6982/stream',
   radioName: 'Rádio Treze de Maio',
-  logoUrl: DEFAULT_LOGO, 
+  logoUrl: '', // Clean default
   phone: '(48) 3625-0000',
   whatsapp: '(48) 99999-0000',
   email: 'contato@radiotrezedemaio.com.br',
@@ -25,13 +22,13 @@ const DEFAULT_SETTINGS: SiteSettings = {
   aboutText: 'A Rádio Treze de Maio é a voz da nossa comunidade. Conectando nossa terra, nossa cultura e nossa fé através das ondas do rádio e do streaming digital. Sintonize 24 horas por dia.',
   aboutImageUrl: 'https://images.unsplash.com/photo-1478737270239-2f02b77ac6d5?q=80&w=1920&auto=format&fit=crop',
   rssUrls: [
-    // Default Google News RSS for Treze de Maio
     'https://news.google.com/rss/search?q=Treze+de+Maio+Santa+Catarina&hl=pt-BR&gl=BR&ceid=BR:pt-419',
-    // Folha Regional Web TV (Fonte Regional)
     'https://folharegionalwebtv.com/feed'
   ],
   apiUrl: '',
-  apiKey: ''
+  apiKey: '',
+  facebookUrl: 'https://www.facebook.com/radiotrezedemaiosc/',
+  instagramUrl: 'https://www.instagram.com/radio13demaio.sc/'
 };
 
 const DEFAULT_PROGRAMS: Program[] = [
@@ -73,57 +70,46 @@ const DEFAULT_NEWS: NewsItem[] = [
   }
 ];
 
-// Helper to simulate Database
 export const db = {
   init: () => {
-    // SETTINGS INIT
+    // 1. Force Clean of Old Junk Data
+    try {
+        const rawSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+        if (rawSettings) {
+            const settings = JSON.parse(rawSettings);
+            if (settings.logoUrl && (settings.logoUrl.includes('PHN2Zy') || settings.logoUrl.includes('<svg'))) {
+                settings.logoUrl = ''; // NUKE IT
+                localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+            }
+        }
+    } catch (e) {
+        console.error("Cleanup error", e);
+    }
+
+    // 2. Standard Init
     if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
     } else {
-        // MIGRATION & REPAIR
-        try {
-            const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS) || '{}');
-            let updated = false;
+        // Migration to ensure fields exist
+        const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS) || '{}');
+        let updated = false;
 
-            // Fix 1: Auto-update old ZenoFM URL
-            if (current.streamUrl === 'https://stream.zeno.fm/mn062547808tv') {
-                current.streamUrl = DEFAULT_SETTINGS.streamUrl;
-                updated = true;
-            }
+        // Ensure array exists
+        if (!Array.isArray(current.rssUrls)) {
+            current.rssUrls = DEFAULT_SETTINGS.rssUrls;
+            updated = true;
+        }
+        
+        // Ensure defaults
+        if (!current.streamUrl) { current.streamUrl = DEFAULT_SETTINGS.streamUrl; updated = true; }
+        if (!current.radioName) { current.radioName = DEFAULT_SETTINGS.radioName; updated = true; }
+        
+        // Ensure social media defaults
+        if (!current.facebookUrl) { current.facebookUrl = DEFAULT_SETTINGS.facebookUrl; updated = true; }
+        if (!current.instagramUrl) { current.instagramUrl = DEFAULT_SETTINGS.instagramUrl; updated = true; }
 
-            // Fix 2: CLEANUP OLD BASE64 LOGO
-            const OLD_DEFAULT_START = "data:image/svg+xml;base64,PHN2Zy";
-            if (current.logoUrl && current.logoUrl.startsWith(OLD_DEFAULT_START)) {
-                current.logoUrl = "";
-                updated = true;
-            }
-            
-            // Fix 3: Ensure rssUrls exists
-            if (!Array.isArray(current.rssUrls)) {
-                current.rssUrls = DEFAULT_SETTINGS.rssUrls; // Restore default RSS if missing
-                updated = true;
-            } else if (current.rssUrls.length === 0) {
-                 current.rssUrls = DEFAULT_SETTINGS.rssUrls;
-                 updated = true;
-            }
-
-            // Fix 4: Ensure API fields exist
-            if (current.apiUrl === undefined) {
-                current.apiUrl = '';
-                updated = true;
-            }
-
-            // Fix 5: Add Folha Regional if missing
-            if (current.rssUrls && !current.rssUrls.includes('https://folharegionalwebtv.com/feed')) {
-                 current.rssUrls.push('https://folharegionalwebtv.com/feed');
-                 updated = true;
-            }
-
-            if (updated) {
-                localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(current));
-            }
-        } catch (e) {
-            console.error("Migration error", e);
+        if (updated) {
+            localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(current));
         }
     }
 
@@ -131,26 +117,19 @@ export const db = {
       localStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(DEFAULT_PROGRAMS));
     }
     
-    // Logic to populate or update news if only the old default (2 items) exists
+    // News Init
     const storedNews = JSON.parse(localStorage.getItem(STORAGE_KEYS.NEWS) || '[]');
     if (storedNews.length === 0 || storedNews.length <= 2) {
       localStorage.setItem(STORAGE_KEYS.NEWS, JSON.stringify(DEFAULT_NEWS));
-    } else {
-      // Migration for new fields
-      const updatedNews = storedNews.map((n: any) => ({
-          ...n,
-          subtitle: n.subtitle || '',
-          gallery: n.gallery || (n.imageUrl ? [n.imageUrl] : []),
-          source: n.source || 'Redação'
-      }));
-      // Check if migration needed
-      if (!storedNews[0].gallery) {
-          localStorage.setItem(STORAGE_KEYS.NEWS, JSON.stringify(updatedNews));
-      }
     }
 
+    // Rejected News Init
+    if (!localStorage.getItem(STORAGE_KEYS.REJECTED_NEWS)) {
+      localStorage.setItem(STORAGE_KEYS.REJECTED_NEWS, JSON.stringify([]));
+    }
+
+    // Auth Init
     if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
-      // Default Admin
       const admin: User = { id: '1', name: 'Administrador', email: 'drynos.com@gmail.com', role: UserRole.ADMIN };
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify([admin]));
     }
@@ -161,7 +140,15 @@ export const db = {
   },
 
   saveSettings: (settings: SiteSettings) => {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    // Safety check for quota
+    try {
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    } catch (e) {
+        // If quota exceeded, try to clear the logo to save at least text data
+        console.error("Quota exceeded, clearing logo to save settings", e);
+        // We throw to let the UI know, but we try a fallback save without image if crucial
+        throw e;
+    }
   },
 
   getNews: (onlyPublished = false): NewsItem[] => {
@@ -169,7 +156,6 @@ export const db = {
     return onlyPublished ? news.filter(n => n.published) : news;
   },
 
-  // NEW METHOD
   getNewsItem: (id: string): NewsItem | undefined => {
     const news: NewsItem[] = JSON.parse(localStorage.getItem(STORAGE_KEYS.NEWS) || '[]');
     return news.find(n => n.id === id);
@@ -189,6 +175,26 @@ export const db = {
   deleteNewsItem: (id: string) => {
     const news = db.getNews().filter(n => n.id !== id);
     localStorage.setItem(STORAGE_KEYS.NEWS, JSON.stringify(news));
+  },
+
+  getRejectedNews: (): NewsItem[] => {
+      return JSON.parse(localStorage.getItem(STORAGE_KEYS.REJECTED_NEWS) || '[]');
+  },
+
+  saveRejectedNews: (item: NewsItem) => {
+      const rejected = db.getRejectedNews();
+      if (rejected.some(r => r.title === item.title)) return;
+      rejected.unshift(item);
+      localStorage.setItem(STORAGE_KEYS.REJECTED_NEWS, JSON.stringify(rejected));
+  },
+
+  deleteRejectedNews: (id: string) => {
+      const rejected = db.getRejectedNews().filter(n => n.id !== id);
+      localStorage.setItem(STORAGE_KEYS.REJECTED_NEWS, JSON.stringify(rejected));
+  },
+  
+  clearRejectedNews: () => {
+      localStorage.setItem(STORAGE_KEYS.REJECTED_NEWS, JSON.stringify([]));
   },
 
   getPrograms: (): Program[] => {

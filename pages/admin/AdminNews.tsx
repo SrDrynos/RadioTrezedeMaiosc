@@ -3,13 +3,19 @@ import React, { useEffect, useState } from 'react';
 import { db } from '../../services/db';
 import { newsAutomationService } from '../../services/newsAutomation';
 import { NewsItem, IncomingWebhookData } from '../../types';
-import { Trash2, Edit, Plus, X, Zap, Code, AlertTriangle, Rss, Save, Upload, Image as ImageIcon, Video, Link as LinkIcon, Eye, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Trash2, Edit, Plus, X, Zap, Code, AlertTriangle, Rss, Save, Upload, Image as ImageIcon, Video, Link as LinkIcon, Eye, CheckCircle, ArrowLeft, Archive, Ban, ExternalLink } from 'lucide-react';
 
 const AdminNews: React.FC = () => {
   const [news, setNews] = useState<NewsItem[]>([]);
+  const [rejectedNews, setRejectedNews] = useState<NewsItem[]>([]);
+  const [viewMode, setViewMode] = useState<'active' | 'rejected'>('active');
+
   const [isEditing, setIsEditing] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
   
+  // Preview State (For reading rejected news)
+  const [previewItem, setPreviewItem] = useState<NewsItem | null>(null);
+
   // CMS State
   const [currentNews, setCurrentNews] = useState<Partial<NewsItem>>({});
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -27,23 +33,53 @@ const AdminNews: React.FC = () => {
     loadNews();
   }, []);
 
-  const loadNews = () => setNews(db.getNews());
+  const loadNews = () => {
+      setNews(db.getNews());
+      setRejectedNews(db.getRejectedNews());
+  };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (id: string, fromRejected = false) => {
     if (window.confirm('Tem certeza que deseja excluir esta notícia permanentemente?')) {
-      db.deleteNewsItem(id);
+      if (fromRejected) {
+          db.deleteRejectedNews(id);
+          if (previewItem?.id === id) setPreviewItem(null); // Close modal if open
+      } else {
+          db.deleteNewsItem(id);
+      }
       loadNews();
     }
   };
 
+  const handleClearRejected = () => {
+      if (window.confirm("Isso apagará TODAS as notícias rejeitadas. Tem certeza?")) {
+          db.clearRejectedNews();
+          loadNews();
+      }
+  };
+
   const handleEdit = (item: NewsItem) => {
-    // Ensure legacy items have arrays
+    // Close preview if open
+    setPreviewItem(null);
+
+    const isRejected = !!item.rejectionReason;
+    
+    // Prepare data for editor
     setCurrentNews({
         ...item,
-        gallery: item.gallery || (item.imageUrl ? [item.imageUrl] : [])
+        id: isRejected ? Date.now().toString() : item.id, // Generate new ID if it was rejected (treat as new)
+        gallery: item.gallery || (item.imageUrl ? [item.imageUrl] : []),
+        rejectionReason: undefined // Clear reason so it can be saved as clean news
     });
+
+    if (isRejected) {
+        // If it was rejected, we remove it from the "Quarantine" list immediately 
+        // because the user is taking responsibility for it now.
+        db.deleteRejectedNews(item.id); 
+    }
+
     setIsEditing(true);
     setValidationError(null);
+    loadNews(); // Refresh lists to show it moved (or removed from rejected)
   };
 
   const handleAddNew = () => {
@@ -506,6 +542,61 @@ const AdminNews: React.FC = () => {
         </div>
       )}
 
+      {/* REJECTED PREVIEW MODAL */}
+      {previewItem && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+                  {/* Header */}
+                  <div className="bg-red-50 p-4 border-b border-red-100 flex justify-between items-center">
+                      <div className="flex items-center gap-2 text-red-700">
+                          <AlertTriangle size={20} />
+                          <span className="font-bold">Notícia Rejeitada: {previewItem.rejectionReason}</span>
+                      </div>
+                      <button onClick={() => setPreviewItem(null)} className="text-gray-500 hover:text-gray-800">
+                          <X size={24} />
+                      </button>
+                  </div>
+
+                  {/* Body Scroll */}
+                  <div className="overflow-y-auto p-8">
+                      <h2 className="text-2xl font-black text-gray-900 mb-2">{previewItem.title}</h2>
+                      <p className="text-lg text-gray-600 font-medium mb-6 leading-snug">{previewItem.subtitle || previewItem.excerpt}</p>
+                      
+                      {previewItem.imageUrl && (
+                          <div className="mb-6 rounded-lg overflow-hidden border border-gray-200">
+                              <img src={previewItem.imageUrl} className="w-full h-64 object-cover" alt="Preview" />
+                          </div>
+                      )}
+                      
+                      <div className="prose prose-sm max-w-none text-gray-800 border-t border-gray-100 pt-6">
+                           <div dangerouslySetInnerHTML={{ __html: previewItem.content }} />
+                      </div>
+
+                      <div className="mt-8 flex items-center justify-between text-xs text-gray-400 uppercase font-bold tracking-widest border-t pt-4">
+                          <span>Data: {new Date(previewItem.createdAt).toLocaleDateString()}</span>
+                          <span>Fonte: {previewItem.source}</span>
+                      </div>
+                  </div>
+
+                  {/* Footer Actions */}
+                  <div className="bg-gray-50 p-4 border-t border-gray-200 flex justify-end gap-3">
+                      <button 
+                        onClick={() => handleDelete(previewItem.id, true)}
+                        className="px-4 py-2 text-red-600 hover:bg-red-50 rounded font-bold border border-transparent hover:border-red-200 transition"
+                      >
+                          Excluir Definitivamente
+                      </button>
+                      <button 
+                        onClick={() => handleEdit(previewItem)}
+                        className="px-6 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 transition shadow-lg flex items-center gap-2"
+                      >
+                          <Edit size={16} /> Editar e Aprovar
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
         <div>
             <h1 className="text-2xl font-bold text-gray-800">Redação Jornalística</h1>
@@ -532,56 +623,141 @@ const AdminNews: React.FC = () => {
       </div>
       
       {syncMessage && (
-        <div className={`mb-6 p-4 rounded-lg flex items-center gap-2 font-bold animate-fade-in ${syncMessage.includes('Nenhuma') ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-700'}`}>
+        <div className={`mb-6 p-4 rounded-lg flex items-center gap-2 font-bold animate-fade-in ${syncMessage.includes('Rejeitadas') ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-700'}`}>
             <CheckCircle size={20} /> {syncMessage}
         </div>
       )}
 
+      {/* Tabs */}
+      <div className="flex gap-4 mb-4 border-b border-gray-200">
+          <button 
+            onClick={() => setViewMode('active')}
+            className={`pb-2 px-4 font-bold text-sm flex items-center gap-2 border-b-2 transition ${viewMode === 'active' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+              <Archive size={16} />
+              Publicadas / Rascunhos ({news.length})
+          </button>
+          <button 
+            onClick={() => setViewMode('rejected')}
+            className={`pb-2 px-4 font-bold text-sm flex items-center gap-2 border-b-2 transition ${viewMode === 'rejected' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+              <Ban size={16} />
+              Rejeitadas pela IA ({rejectedNews.length})
+          </button>
+      </div>
+
       <div className="bg-white rounded-xl shadow overflow-hidden border border-slate-200">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 text-slate-600 uppercase text-xs">
-                <tr>
-                    <th className="p-4">Manchete</th>
-                    <th className="p-4">Fonte</th>
-                    <th className="p-4">Publicação</th>
-                    <th className="p-4">Estado</th>
-                    <th className="p-4 text-right">Ações</th>
-                </tr>
-            </thead>
-            <tbody>
-                {news.map(item => (
-                    <tr key={item.id} className="border-b hover:bg-slate-50 transition">
-                        <td className="p-4">
-                            <div className="font-bold text-slate-800">{item.title}</div>
-                            <div className="text-xs text-slate-500 truncate max-w-xs">{item.subtitle || item.excerpt}</div>
-                        </td>
-                        <td className="p-4 text-sm text-slate-600">
-                            {item.source}
-                        </td>
-                        <td className="p-4 text-sm text-slate-500">{new Date(item.createdAt).toLocaleDateString()}</td>
-                        <td className="p-4">
-                            <span className={`px-2 py-1 text-xs rounded-full font-bold ${item.published ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                                {item.published ? 'NO AR' : 'RASCUNHO'}
-                            </span>
-                        </td>
-                        <td className="p-4 text-right space-x-2">
-                            <button onClick={() => handleEdit(item)} className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded"><Edit size={18} /></button>
-                            <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded"><Trash2 size={18} /></button>
-                        </td>
-                    </tr>
-                ))}
-                {news.length === 0 && (
+          {viewMode === 'active' ? (
+              /* ACTIVE TABLE */
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-slate-50 text-slate-600 uppercase text-xs">
                     <tr>
-                        <td colSpan={5} className="p-12 text-center text-gray-400">
-                            <div className="flex flex-col items-center">
-                                <Zap size={48} className="mb-2 opacity-20" />
-                                Nenhuma notícia. Crie a primeira ou sincronize o RSS.
-                            </div>
-                        </td>
+                        <th className="p-4">Manchete</th>
+                        <th className="p-4">Fonte</th>
+                        <th className="p-4">Publicação</th>
+                        <th className="p-4">Estado</th>
+                        <th className="p-4 text-right">Ações</th>
                     </tr>
-                )}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                    {news.map(item => (
+                        <tr key={item.id} className="border-b hover:bg-slate-50 transition">
+                            <td className="p-4">
+                                <div className="font-bold text-slate-800">{item.title}</div>
+                                <div className="text-xs text-slate-500 truncate max-w-xs">{item.subtitle || item.excerpt}</div>
+                            </td>
+                            <td className="p-4 text-sm text-slate-600">
+                                {item.source}
+                            </td>
+                            <td className="p-4 text-sm text-slate-500">{new Date(item.createdAt).toLocaleDateString()}</td>
+                            <td className="p-4">
+                                <span className={`px-2 py-1 text-xs rounded-full font-bold ${item.published ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                    {item.published ? 'NO AR' : 'RASCUNHO'}
+                                </span>
+                            </td>
+                            <td className="p-4 text-right space-x-2">
+                                <button onClick={() => handleEdit(item)} className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded"><Edit size={18} /></button>
+                                <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded"><Trash2 size={18} /></button>
+                            </td>
+                        </tr>
+                    ))}
+                    {news.length === 0 && (
+                        <tr>
+                            <td colSpan={5} className="p-12 text-center text-gray-400">
+                                <div className="flex flex-col items-center">
+                                    <Zap size={48} className="mb-2 opacity-20" />
+                                    Nenhuma notícia ativa.
+                                </div>
+                            </td>
+                        </tr>
+                    )}
+                </tbody>
+              </table>
+          ) : (
+             /* REJECTED TABLE */
+             <div>
+                <div className="bg-red-50 p-3 text-xs text-red-700 flex justify-between items-center border-b border-red-100">
+                    <span className="flex items-center gap-2"><AlertTriangle size={14} /> Estas notícias não passaram nos filtros automáticos (Localização, Score ou Data).</span>
+                    {rejectedNews.length > 0 && (
+                        <button onClick={handleClearRejected} className="text-red-600 underline font-bold hover:text-red-800">Limpar Tudo</button>
+                    )}
+                </div>
+                <table className="w-full text-left border-collapse bg-slate-50">
+                    <thead className="bg-red-100 text-red-800 uppercase text-xs">
+                        <tr>
+                            <th className="p-4">Título</th>
+                            <th className="p-4">Motivo da Rejeição</th>
+                            <th className="p-4">Data Original</th>
+                            <th className="p-4 text-right">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rejectedNews.map(item => (
+                            <tr key={item.id} className="border-b border-red-100 hover:bg-red-50 transition opacity-80 hover:opacity-100">
+                                <td className="p-4">
+                                    <div className="font-bold text-slate-800">{item.title}</div>
+                                    <div className="text-xs text-slate-500">{item.source}</div>
+                                </td>
+                                <td className="p-4">
+                                    <span className="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-bold">
+                                        {item.rejectionReason}
+                                    </span>
+                                </td>
+                                <td className="p-4 text-sm text-slate-500">{new Date(item.createdAt).toLocaleDateString()}</td>
+                                <td className="p-4 text-right space-x-2">
+                                    {/* PREVIEW BUTTON (EYE) */}
+                                    <button 
+                                        onClick={() => setPreviewItem(item)}
+                                        className="bg-white border border-gray-300 hover:bg-gray-100 text-gray-600 px-3 py-1.5 rounded text-xs font-bold shadow-sm inline-flex items-center gap-1"
+                                        title="Ler Notícia"
+                                    >
+                                        <Eye size={14} /> Ler
+                                    </button>
+
+                                    <button 
+                                        onClick={() => handleEdit(item)} 
+                                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm inline-flex items-center gap-1"
+                                    >
+                                        <Edit size={14} /> Aprovar
+                                    </button>
+                                    <button onClick={() => handleDelete(item.id, true)} className="text-red-400 hover:text-red-600 p-2"><Trash2 size={16} /></button>
+                                </td>
+                            </tr>
+                        ))}
+                         {rejectedNews.length === 0 && (
+                            <tr>
+                                <td colSpan={4} className="p-12 text-center text-gray-400">
+                                    <div className="flex flex-col items-center">
+                                        <CheckCircle size={48} className="mb-2 opacity-20 text-green-500" />
+                                        Nenhuma notícia rejeitada. O filtro está limpo.
+                                    </div>
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+             </div>
+          )}
       </div>
     </div>
   );

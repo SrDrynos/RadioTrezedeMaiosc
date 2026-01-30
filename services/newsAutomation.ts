@@ -27,16 +27,17 @@ export const newsAutomationService = {
     const extractedImage = extractImageFromHtml(data.conteudo_html);
     const finalImage = extractedImage || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?q=80&w=1000&auto=format&fit=crop';
 
-    // Adiciona fonte ao final do conteúdo HTML se fornecida
-    let finalContent = data.conteudo_html;
-    if (data.fonte) {
-        finalContent += `<p><em>Fonte: ${data.fonte}</em></p>`;
-    }
+    // Formata o conteúdo seguindo o padrão estrito solicitado
+    const formattedHtml = generateSeoStructure({
+        title: data.titulo,
+        content: data.conteudo_html,
+        pubDate: data.data_publicacao
+    }, data.fonte || "Redação Automática");
 
     const newNewsItem: NewsItem = {
       id: Date.now().toString(),
       title: data.titulo,
-      content: finalContent,
+      content: formattedHtml,
       excerpt: excerpt,
       category: 'Treze de Maio - SC',
       imageUrl: finalImage,
@@ -58,9 +59,9 @@ export const newsAutomationService = {
 
     let addedCount = 0;
     let rejectedCount = 0;
-    let rejectedReason = "";
     
     const existingTitles = new Set(db.getNews().map(n => n.title));
+    const rejectedTitles = new Set(db.getRejectedNews().map(n => n.title));
 
     for (const url of urls) {
        try {
@@ -70,64 +71,77 @@ export const newsAutomationService = {
          
          if (data.status === 'ok' && Array.isArray(data.items)) {
            for (const item of data.items) {
+             
+             if (existingTitles.has(item.title) || rejectedTitles.has(item.title)) continue;
+
              // Clean Content
              const cleanContent = item.content || item.description || "";
              const fullText = (item.title + " " + cleanContent).toLowerCase();
-
-             // 1. FILTRO DE LOCALIZAÇÃO (REGRA CRÍTICA)
-             if (!fullText.includes("treze de maio")) {
-                 rejectedCount++;
-                 rejectedReason = "Não menciona Treze de Maio";
-                 continue;
-             }
-
-             // 2. DATE FILTER (Last 5 days to be safe)
+             
+             // Common Props for both Accepted and Rejected
              const pubDate = new Date(item.pubDate.replace(/-/g, '/'));
-             const today = new Date();
-             const timeDiff = today.getTime() - pubDate.getTime();
-             const daysDiff = timeDiff / (1000 * 3600 * 24);
-             
-             if (daysDiff > 5) {
-                 rejectedCount++;
-                 rejectedReason = "Notícia antiga (> 5 dias)";
-                 continue;
-             }
-
-             if (existingTitles.has(item.title)) continue;
-
-             // 3. ANÁLISE E CLASSIFICAÇÃO (SCORE)
-             const score = calculateScore(item, fullText);
-             
-             if (score < 7.5) {
-                 console.log(`Rejected: ${item.title} (Score: ${score})`);
-                 rejectedCount++;
-                 rejectedReason = `Score Insuficiente (${score})`;
-                 continue;
-             }
-
-             // 4. GERAR CONTEÚDO (ESTRUTURA SEO OBRIGATÓRIA + CITAÇÃO DE FONTE)
-             const formattedHtml = generateSeoStructure(item, feedTitle);
-             
-             // 5. EXTRAÇÃO DE IMAGEM ORIGINAL (Prioridade Máxima)
-             // Ordem: Enclosure (RSS padrão) > Thumbnail > Imagem dentro do HTML > Placeholder
              const image = item.enclosure?.link || item.thumbnail || extractImageFromHtml(cleanContent) || 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?q=80&w=1000';
+             
+             // --- FORMATTING: APPLY STRICT TEMPLATE HERE ---
+             const formattedHtml = generateSeoStructure(item, feedTitle);
 
              const newItem: NewsItem = {
                  id: Date.now().toString() + Math.random().toString().slice(2,5),
-                 title: item.title, // Título jornalístico
-                 content: formattedHtml, // Texto otimizado HTML com Fonte no final
+                 title: item.title, 
+                 subtitle: item.title, 
+                 content: formattedHtml, 
                  excerpt: stripHtml(item.description || cleanContent).substring(0, 150) + "...",
                  category: determineCategory(fullText),
                  imageUrl: image,
+                 gallery: [image],
                  createdAt: pubDate.toISOString(),
                  published: true,
                  source: feedTitle,
-                 tags: ['Automático', 'Treze de Maio']
+                 tags: ['Automático', 'RSS']
              };
 
-             db.saveNewsItem(newItem);
-             existingTitles.add(item.title);
-             addedCount++;
+             // --- VALIDATION RULES ---
+             
+             let rejectionReason = null;
+
+             // 1. FILTRO DE LOCALIZAÇÃO (REGRA CRÍTICA)
+             if (!fullText.includes("treze de maio")) {
+                 rejectionReason = "Localização (Não menciona Treze de Maio)";
+             }
+
+             // 2. DATE FILTER (Last 5 days to be safe)
+             if (!rejectionReason) {
+                const today = new Date();
+                const timeDiff = today.getTime() - pubDate.getTime();
+                const daysDiff = timeDiff / (1000 * 3600 * 24);
+                if (daysDiff > 5) {
+                    rejectionReason = "Notícia Antiga (> 5 dias)";
+                }
+             }
+
+             // 3. ANÁLISE E CLASSIFICAÇÃO (SCORE)
+             if (!rejectionReason) {
+                 const score = calculateScore(item, fullText);
+                 if (score < 7.5) {
+                     rejectionReason = `Score Baixo (${score}/10)`;
+                 }
+             }
+
+             // --- DECISION ---
+             if (rejectionReason) {
+                 // Save to Quarantine
+                 newItem.published = false;
+                 newItem.rejectionReason = rejectionReason;
+                 newItem.id = "REJ_" + newItem.id; // Mark ID
+                 db.saveRejectedNews(newItem);
+                 rejectedCount++;
+                 rejectedTitles.add(item.title);
+             } else {
+                 // Publish
+                 db.saveNewsItem(newItem);
+                 existingTitles.add(item.title);
+                 addedCount++;
+             }
            }
          }
        } catch(e) {
@@ -135,11 +149,10 @@ export const newsAutomationService = {
        }
     }
     
-    if (addedCount === 0) {
-        return { count: 0, message: `Nenhuma notícia aprovada. ${rejectedCount > 0 ? `(${rejectedCount} rejeitadas: ${rejectedReason})` : ''}` };
-    }
-
-    return { count: addedCount, message: `${addedCount} notícias geradas e publicadas com sucesso.` };
+    return { 
+        count: addedCount, 
+        message: `${addedCount} publicadas. ${rejectedCount} enviadas para análise (Rejeitadas).` 
+    };
   }
 };
 
@@ -153,7 +166,7 @@ function calculateScore(item: any, text: string): number {
     else if (text.includes("treze de maio")) score += 2;
     
     // Interesse Público / Palavras-chave (0-2)
-    const keywords = ["incêndio", "obras", "saúde", "prefeitura", "festa", "acidente", "polícia", "bombeiros", "segurança", "evento", "comunicado", "falecimento", "nota"];
+    const keywords = ["incêndio", "obras", "saúde", "prefeitura", "festa", "acidente", "polícia", "bombeiros", "segurança", "evento", "comunicado", "falecimento", "nota", "censo", "ibge", "população"];
     const hasKeyword = keywords.some(k => text.includes(k));
     if (hasKeyword) score += 2;
 
@@ -170,34 +183,70 @@ function calculateScore(item: any, text: string): number {
 }
 
 function generateSeoStructure(item: any, sourceName: string): string {
-    const rawDesc = stripHtml(item.description || item.content).trim();
-    // Remove "Leia mais" artifacts typical in RSS
-    const cleanDesc = rawDesc.replace(/Leia mais.*/i, '').replace(/\.\.\.$/, '');
+    const title = item.title || "";
+    let rawDesc = stripHtml(item.description || item.content || "").trim();
     
-    const sentences = cleanDesc.split('. ').filter(s => s.length > 10);
-    const intro = sentences[0] ? sentences[0] + '.' : cleanDesc;
-    const details = sentences.slice(1).join('. ') || "Mais informações estão sendo apuradas.";
+    // Limpeza de artefatos comuns de RSS
+    rawDesc = rawDesc.replace(/Leia mais.*/i, '').replace(/\.\.\.$/, '').replace(/&nbsp;/g, ' ');
 
-    return `
-      <p><strong>Introdução:</strong> ${intro} O fato ocorreu no município de Treze de Maio, Santa Catarina.</p>
+    // CORREÇÃO CRÍTICA DE REPETIÇÃO:
+    // Verifica se a descrição começa com o título (comum em RSS do Google News)
+    if (rawDesc.toLowerCase().startsWith(title.toLowerCase())) {
+        // Remove o título do início do texto
+        rawDesc = rawDesc.substring(title.length).trim();
+        // Remove pontuações soltas que sobram (ex: " - Texto...")
+        rawDesc = rawDesc.replace(/^[\s\-\:\.]+/g, '');
+    }
 
-      <h2>O que aconteceu</h2>
-      <p>${details}</p>
+    // Quebra o texto em sentenças para tentar estruturar
+    const parts = rawDesc.split('. ').filter(s => s.length > 20);
+    
+    // Introdução (1 ou 2 primeiras frases)
+    const intro = parts.slice(0, 2).join('. ') + (parts.length > 0 ? '.' : '');
+    
+    // Restante do conteúdo
+    const remainder = parts.slice(2).join('. ') + (parts.length > 2 ? '.' : '');
+
+    // Formatação da Data em Português (Ex: 28 de junho de 2023)
+    const dateObj = item.pubDate ? new Date(item.pubDate) : new Date();
+    const dateStr = dateObj.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    // REMOVIDO: let html = `<h1>${title}</h1>`; 
+    // MOTIVO: O título já aparece no cabeçalho da página de notícias, causava duplicação.
+    let html = "";
+    
+    // Só adiciona intro se tiver conteúdo real
+    if (intro.length > 10) {
+        html += `<p>${intro}</p>`;
+    }
+
+    if (remainder.length > 50) {
+        html += `<h2>Detalhes da informação</h2>`;
+        html += `<p>${remainder}</p>`;
+        
+        if (remainder.length > 400) {
+             html += `<h3>Informações adicionais</h3>`;
+             html += `<p>O fato repercute na região e mobiliza a atenção da comunidade de Treze de Maio.</p>`;
+        }
+    } else {
+        html += `<h2>Contexto</h2>`;
+        html += `<p>Esta informação é de vital importância para o dia a dia e o planejamento dos moradores de Treze de Maio e arredores.</p>`;
+    }
+
+    // Parágrafo Padrão de Encerramento e Rodapé
+    html += `
+      <br/>
+      <p>A Rádio Treze de Maio segue acompanhando e divulgando informações de interesse público, mantendo a população informada sobre dados relevantes que impactam diretamente a vida no município.</p>
       
-      <h2>Detalhes da ocorrência</h2>
-      <p>A situação mobilizou a atenção da comunidade local. De acordo com informações preliminares, o evento tem relevância direta para os moradores da região.</p>
-
-      <h3>Atuação das equipes envolvidas</h3>
-      <p>Equipes competentes e autoridades locais estão cientes e atuando conforme necessário para a gestão da situação.</p>
-
-      <h2>Impacto para a comunidade</h2>
-      <p>Este acontecimento reforça a importância de estar atento aos comunicados oficiais e eventos em nossa cidade.</p>
-
-      <h2>Conclusão</h2>
-      <p>A Rádio Treze de Maio segue acompanhando o caso e trará novas atualizações a qualquer momento em nossa programação.</p>
-      
-      <p><small><strong>Fonte:</strong> ${sourceName}</small></p>
+      <br/>
+      <p>
+      📅 Data: ${dateStr}<br/>
+      📰 Redação: Rádio Treze de Maio<br/>
+      📌 Fonte: ${sourceName}
+      </p>
     `;
+
+    return html;
 }
 
 function determineCategory(text: string): 'Treze de Maio - SC' | 'Região' | 'Avisos' {

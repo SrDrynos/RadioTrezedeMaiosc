@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { Menu, X, Facebook, Instagram, Youtube, Phone, Play, Pause, Volume2, VolumeX } from 'lucide-react';
@@ -83,9 +84,9 @@ const PublicLayout: React.FC = () => {
             <span className="text-yellow-400 font-bold tracking-widest text-xs">A VOZ DE TREZE DE MAIO</span>
           </div>
           <div className="flex space-x-4">
-            <a href="#" className="hover:text-yellow-400"><Facebook size={16} /></a>
-            <a href="#" className="hover:text-yellow-400"><Instagram size={16} /></a>
-            <a href="#" className="hover:text-yellow-400"><Youtube size={16} /></a>
+            <a href={settings.facebookUrl || "#"} target="_blank" rel="noopener noreferrer" className="hover:text-yellow-400"><Facebook size={16} /></a>
+            <a href={settings.instagramUrl || "#"} target="_blank" rel="noopener noreferrer" className="hover:text-yellow-400"><Instagram size={16} /></a>
+            <a href="#" className="hover:text-yellow-400 opacity-50 cursor-default" title="Em breve"><Youtube size={16} /></a>
           </div>
         </div>
       </div>
@@ -105,7 +106,7 @@ const PublicLayout: React.FC = () => {
             <Link to="/noticias" className={`hover:text-blue-600 transition ${location.pathname === '/noticias' ? 'text-blue-600' : ''}`}>Notícias</Link>
             <Link to="/programacao" className={`hover:text-blue-600 transition ${location.pathname === '/programacao' ? 'text-blue-600' : ''}`}>Programação</Link>
             <Link to="/pedidos" className={`hover:text-blue-600 transition ${location.pathname === '/pedidos' ? 'text-blue-600' : ''}`}>Pedidos</Link>
-            <Link to="/a-radio" className={`hover:text-blue-600 transition ${location.pathname === '/a-radio' ? 'text-blue-600' : ''}`}>A Rádio</Link>
+            <Link to="/a-radio" className={`hover:text-blue-600 transition ${location.pathname === '/a-radio' ? 'text-blue-600' : ''}`}>Quem Somos</Link>
             <Link to="/contato" className={`hover:text-blue-600 transition ${location.pathname === '/contato' ? 'text-blue-600' : ''}`}>Contato</Link>
           </nav>
 
@@ -122,7 +123,7 @@ const PublicLayout: React.FC = () => {
             <Link to="/noticias" className="block py-2 text-gray-700 font-bold uppercase border-b border-gray-100">Notícias</Link>
             <Link to="/programacao" className="block py-2 text-gray-700 font-bold uppercase border-b border-gray-100">Programação</Link>
             <Link to="/pedidos" className="block py-2 text-gray-700 font-bold uppercase border-b border-gray-100">Pedidos Musicais</Link>
-            <Link to="/a-radio" className="block py-2 text-gray-700 font-bold uppercase border-b border-gray-100">A Rádio</Link>
+            <Link to="/a-radio" className="block py-2 text-gray-700 font-bold uppercase border-b border-gray-100">Quem Somos</Link>
             <Link to="/contato" className="block py-2 text-gray-700 font-bold uppercase">Contato</Link>
           </nav>
         )}
@@ -151,17 +152,19 @@ const PublicLayout: React.FC = () => {
                 </div>
                 <p className="text-gray-300 text-sm mb-4 leading-relaxed">A Voz de Treze de Maio para o mundo. Levando nossa cultura, nossa fé e o melhor da música para onde você estiver.</p>
                 <div className="flex space-x-3">
-                   <div className="w-8 h-8 bg-blue-700 rounded flex items-center justify-center cursor-pointer hover:bg-yellow-400 hover:text-blue-900 transition"><Facebook size={18} /></div>
-                   <div className="w-8 h-8 bg-blue-700 rounded flex items-center justify-center cursor-pointer hover:bg-yellow-400 hover:text-blue-900 transition"><Instagram size={18} /></div>
+                   <a href={settings.facebookUrl || "#"} target="_blank" rel="noopener noreferrer" className="w-8 h-8 bg-blue-700 rounded flex items-center justify-center cursor-pointer hover:bg-yellow-400 hover:text-blue-900 transition"><Facebook size={18} /></a>
+                   <a href={settings.instagramUrl || "#"} target="_blank" rel="noopener noreferrer" className="w-8 h-8 bg-blue-700 rounded flex items-center justify-center cursor-pointer hover:bg-yellow-400 hover:text-blue-900 transition"><Instagram size={18} /></a>
                 </div>
             </div>
             <div>
                 <h3 className="text-lg font-bold mb-4 text-green-400 uppercase tracking-wide">Links Rápidos</h3>
                 <ul className="space-y-2 text-gray-300 text-sm font-medium">
+                    <li><Link to="/a-radio" className="hover:text-yellow-400 transition">Quem Somos</Link></li>
                     <li><Link to="/noticias" className="hover:text-yellow-400 transition">Notícias Locais</Link></li>
                     <li><Link to="/programacao" className="hover:text-yellow-400 transition">Nossa Grade</Link></li>
                     <li><Link to="/pedidos" className="hover:text-yellow-400 transition">Peça sua Música</Link></li>
-                    <li><Link to="/admin" className="hover:text-yellow-400 transition">Área Administrativa</Link></li>
+                    <li><Link to="/contato" className="hover:text-yellow-400 transition">Contato</Link></li>
+                    <li><Link to="/admin" className="hover:text-yellow-400 transition opacity-50">Área Administrativa</Link></li>
                 </ul>
             </div>
             <div>
