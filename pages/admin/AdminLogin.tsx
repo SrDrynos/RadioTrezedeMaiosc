@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../../services/auth';
@@ -33,7 +34,7 @@ const AdminLogin: React.FC = () => {
       if (user) {
         navigate('/admin/dashboard');
       } else {
-        setError('Credenciais inválidas. Tente drynos.com@gmail.com / 332526');
+        setError('Credenciais inválidas.');
       }
     } catch (e) {
       setError('Erro ao conectar.');
@@ -66,7 +67,7 @@ const AdminLogin: React.FC = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="drynos.com@gmail.com"
+                    placeholder="admin@radiotrezedemaio.com.br"
                 />
             </div>
             <div>

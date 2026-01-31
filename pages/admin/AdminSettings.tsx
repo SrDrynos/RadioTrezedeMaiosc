@@ -146,7 +146,7 @@ const AdminSettings: React.FC = () => {
     });
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'logoUrl' | 'aboutImageUrl' | 'headerLogoUrl') => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'logoUrl' | 'aboutImageUrl' | 'headerLogoUrl' | 'heroLeftImageUrl' | 'heroRightImageUrl') => {
     const file = e.target.files?.[0];
     setError(null);
     if (file && settings) {
@@ -158,7 +158,7 @@ const AdminSettings: React.FC = () => {
       setIsProcessing(true);
       try {
         // Determine format based on field
-        // logoUrl / headerLogoUrl -> PNG (Preserve Transparency)
+        // logoUrl / headerLogoUrl / heroImages -> PNG (Preserve Transparency)
         // aboutImageUrl -> JPEG (Better Compression)
         const format = field === 'aboutImageUrl' ? 'image/jpeg' : 'image/png';
         
@@ -181,7 +181,7 @@ const AdminSettings: React.FC = () => {
     }
   };
 
-  const handleRemoveImage = (field: 'logoUrl' | 'aboutImageUrl' | 'headerLogoUrl') => {
+  const handleRemoveImage = (field: 'logoUrl' | 'aboutImageUrl' | 'headerLogoUrl' | 'heroLeftImageUrl' | 'heroRightImageUrl') => {
       if (settings) {
           if (window.confirm('Deseja remover esta imagem?')) {
               setSettings({ ...settings, [field]: '' });
@@ -316,6 +316,58 @@ const AdminSettings: React.FC = () => {
                             </p>
                         </div>
                     </div>
+                </div>
+            </section>
+
+            {/* 3. Hero Decor Images (Santa & Castelo) */}
+            <section>
+                <h3 className="text-lg font-bold text-blue-900 border-b pb-2 mb-4 flex items-center gap-2">
+                    <ImageIcon size={20} /> 3. Imagens Decorativas (Topo/Hero)
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                    
+                    {/* Left Image (Castelo) */}
+                    <div>
+                         <label className="block text-sm font-bold text-gray-700 mb-2">Imagem Esquerda (Ex: Castelo)</label>
+                         <div className="bg-gray-100 p-4 rounded-lg flex flex-col items-center border border-gray-300 relative mb-4">
+                            {settings.heroLeftImageUrl ? (
+                                <img src={settings.heroLeftImageUrl} className="h-32 object-contain" />
+                            ) : (
+                                <div className="h-32 flex items-center text-gray-400 text-xs">Sem Imagem</div>
+                            )}
+                         </div>
+                         <div className="flex items-center gap-2">
+                            <label className={`flex-1 cursor-pointer bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 font-bold flex items-center justify-center transition text-sm ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                                <Upload size={16} className="mr-1" /> Alterar
+                                <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'heroLeftImageUrl')} className="hidden" disabled={isProcessing} />
+                            </label>
+                            {settings.heroLeftImageUrl && !isProcessing && (
+                                <button type="button" onClick={() => handleRemoveImage('heroLeftImageUrl')} className="p-2 text-red-500 border rounded hover:bg-red-50"><Trash2 size={16} /></button>
+                            )}
+                         </div>
+                    </div>
+
+                    {/* Right Image (Santa) */}
+                    <div>
+                         <label className="block text-sm font-bold text-gray-700 mb-2">Imagem Direita (Ex: Santa)</label>
+                         <div className="bg-gray-100 p-4 rounded-lg flex flex-col items-center border border-gray-300 relative mb-4">
+                            {settings.heroRightImageUrl ? (
+                                <img src={settings.heroRightImageUrl} className="h-32 object-contain" />
+                            ) : (
+                                <div className="h-32 flex items-center text-gray-400 text-xs">Sem Imagem</div>
+                            )}
+                         </div>
+                         <div className="flex items-center gap-2">
+                            <label className={`flex-1 cursor-pointer bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 font-bold flex items-center justify-center transition text-sm ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                                <Upload size={16} className="mr-1" /> Alterar
+                                <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'heroRightImageUrl')} className="hidden" disabled={isProcessing} />
+                            </label>
+                            {settings.heroRightImageUrl && !isProcessing && (
+                                <button type="button" onClick={() => handleRemoveImage('heroRightImageUrl')} className="p-2 text-red-500 border rounded hover:bg-red-50"><Trash2 size={16} /></button>
+                            )}
+                         </div>
+                    </div>
+
                 </div>
             </section>
 

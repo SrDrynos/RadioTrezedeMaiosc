@@ -1,9 +1,9 @@
 
 <?php
 /**
- * API SIMPLES PARA REACT (FLAT-FILE DATABASE)
+ * API SIMPLES PARA REACT (FLAT-FILE DATABASE + MAIL)
  * Salva todos os dados em um arquivo .json único.
- * Ideal para hospedagens compartilhadas (CPanel) sem configurar SQL.
+ * Envia e-mails de notificação.
  */
 
 // Configurações de CORS (Permite que o React acesse este script)
@@ -32,16 +32,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     exit();
 }
 
-// 2. SALVAR DADOS (POST)
+// 2. SALVAR DADOS E ENVIAR E-MAIL (POST)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Recebe o JSON cru do corpo da requisição
     $inputJSON = file_get_contents('php://input');
     $input = json_decode($inputJSON, true);
 
     if ($input) {
-        // Verifica se é uma mesclagem ou substituição completa
-        // Para simplificar e evitar conflitos, o Admin envia o estado completo das chaves alteradas
         
+        // --- LÓGICA DE ENVIO DE E-MAIL ---
+        if (isset($input['action']) && $input['action'] === 'send_email') {
+            $to = 'drynos.com@gmail.com'; // E-mail fixo conforme solicitado
+            $type = $input['type'] ?? 'notification';
+            $payload = $input['payload'] ?? [];
+            
+            $subject = "Nova Notificação - Rádio 13";
+            $message = "";
+
+            // Configuração dos Headers
+            $headers = "From: noreply@radiotrezedemaio.com.br\r\n";
+            $headers .= "Reply-To: noreply@radiotrezedemaio.com.br\r\n";
+            $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
+            $headers .= "X-Mailer: PHP/" . phpversion();
+
+            // Formatação da Mensagem
+            if ($type === 'request') {
+                $subject = "Novo Pedido Musical: " . ($payload['song'] ?? 'Música Desconhecida');
+                $message .= "=== NOVO PEDIDO MUSICAL ===\n\n";
+                $message .= "Ouvinte: " . ($payload['listenerName'] ?? '-') . "\n";
+                $message .= "Local: " . ($payload['location'] ?? '-') . "\n";
+                $message .= "Música: " . ($payload['song'] ?? '-') . "\n";
+                $message .= "Artista: " . ($payload['artist'] ?? '-') . "\n";
+                $message .= "Recado: " . ($payload['message'] ?? '-') . "\n";
+                $message .= "Data: " . ($payload['createdAt'] ?? date('d/m/Y H:i')) . "\n";
+            } else if ($type === 'message') {
+                $subject = "Nova Mensagem de Contato: " . ($payload['name'] ?? 'Visitante');
+                $message .= "=== NOVA MENSAGEM DO SITE ===\n\n";
+                $message .= "Nome: " . ($payload['name'] ?? '-') . "\n";
+                $message .= "E-mail: " . ($payload['email'] ?? '-') . "\n";
+                $message .= "Data: " . ($payload['date'] ?? date('d/m/Y H:i')) . "\n";
+                $message .= "\nMensagem:\n" . ($payload['message'] ?? '-') . "\n";
+            } else {
+                $message = "Nova notificação recebida do site: \n" . print_r($payload, true);
+            }
+
+            // Tenta enviar o email
+            if (mail($to, $subject, $message, $headers)) {
+                echo json_encode(['success' => true, 'message' => 'Email enviado com sucesso para ' . $to]);
+            } else {
+                // Em localhost sem SMTP configurado, isso falhará.
+                // Retornamos true para não quebrar a UI, mas logamos o erro no console do server se possível.
+                // Em produção (CPanel), mail() costuma funcionar nativamente.
+                echo json_encode(['success' => false, 'message' => 'Falha ao enviar e-mail via mail(). Verifique configurações de SMTP/PHP.']);
+            }
+            exit();
+        }
+
+        // --- LÓGICA DE SALVAMENTO NO BANCO (EXISTENTE) ---
         $currentData = [];
         if (file_exists($dbFile)) {
             $currentData = json_decode(file_get_contents($dbFile), true);
@@ -49,7 +96,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Mescla os dados novos com os existentes
-        // O React envia { "radio_13_news": [...], "radio_13_settings": {...} }
         foreach ($input as $key => $value) {
             $currentData[$key] = $value;
         }

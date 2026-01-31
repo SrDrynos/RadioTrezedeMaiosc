@@ -3,16 +3,18 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { db } from '../../services/db';
 import { NewsItem } from '../../types';
-import { Calendar, ChevronLeft, Share2, Tag, Clock, ExternalLink, PlayCircle } from 'lucide-react';
+import { Calendar, ChevronLeft, Share2, Tag, Clock, ExternalLink, PlayCircle, Radio, Globe } from 'lucide-react';
 
 const NewsDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [newsItem, setNewsItem] = useState<NewsItem | undefined>(undefined);
+  const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     if (id) {
       const item = db.getNewsItem(id);
       setNewsItem(item);
+      setImgError(false); // Reset error on new item
       if (item) {
           document.title = `${item.title} | Notícias de Treze de Maio`;
       }
@@ -22,18 +24,21 @@ const NewsDetail: React.FC = () => {
     };
   }, [id]);
 
-  const AdSpace = ({ label, height = "h-32" }: { label: string, height?: string }) => (
-    <div className={`w-full bg-gray-100 border-2 border-dashed border-gray-300 ${height} flex flex-col items-center justify-center text-gray-500 my-8 rounded-lg`}>
-        <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Publicidade</span>
-        <span className="font-semibold">{label}</span>
-    </div>
-  );
-
   // Helper to extract YouTube ID
   const getYouTubeId = (url: string) => {
       const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
       const match = url.match(regExp);
       return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  const getSourceFavicon = (url?: string) => {
+      if (!url) return null;
+      try {
+          const domain = new URL(url).hostname;
+          return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+      } catch (e) {
+          return null;
+      }
   };
 
   if (!newsItem) {
@@ -48,19 +53,32 @@ const NewsDetail: React.FC = () => {
   }
 
   // Gallery Logic: Combine `imageUrl` (main) + `gallery`
-  // Some legacy items might only have `imageUrl`. New items have `gallery`[0] as main.
   const displayGallery = newsItem.gallery && newsItem.gallery.length > 0 
       ? newsItem.gallery 
       : (newsItem.imageUrl ? [newsItem.imageUrl] : []);
 
   const isHtml = /<[a-z][\s\S]*>/i.test(newsItem.content);
   const youtubeId = newsItem.videoUrl ? getYouTubeId(newsItem.videoUrl) : null;
+  const favicon = getSourceFavicon(newsItem.sourceUrl);
 
   return (
     <div className="bg-white min-h-screen pb-12 animate-fade-in">
         {/* HERO SECTION */}
-        <div className="relative h-[400px] md:h-[500px] w-full">
-             <img src={newsItem.imageUrl || displayGallery[0]} alt={newsItem.title} className="w-full h-full object-cover" />
+        <div className="relative h-[400px] md:h-[500px] w-full bg-slate-900">
+             {imgError || (!newsItem.imageUrl && !displayGallery[0]) ? (
+                 <div className="w-full h-full bg-gradient-to-br from-blue-900 via-blue-800 to-slate-900 flex flex-col items-center justify-center text-white/50">
+                     <Radio size={96} className="mb-4 opacity-30" />
+                     <span className="text-xl font-bold uppercase tracking-widest opacity-30">Rádio Treze de Maio</span>
+                 </div>
+             ) : (
+                 <img 
+                    src={newsItem.imageUrl || displayGallery[0]} 
+                    alt={newsItem.title} 
+                    className="w-full h-full object-cover" 
+                    onError={() => setImgError(true)}
+                 />
+             )}
+             
              <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent"></div>
              
              <div className="absolute bottom-0 left-0 w-full p-6 md:p-12 container mx-auto">
@@ -70,8 +88,13 @@ const NewsDetail: React.FC = () => {
                             {newsItem.category}
                         </span>
                         {newsItem.source && (
-                            <span className="text-gray-300 text-xs font-medium flex items-center bg-black/50 px-2 py-1 rounded border border-white/20">
-                                Fonte: {newsItem.source}
+                            <span className="text-gray-200 text-xs font-bold flex items-center bg-black/60 px-3 py-1 rounded-full border border-white/20 gap-2">
+                                {favicon ? (
+                                    <img src={favicon} alt="" className="w-4 h-4 rounded-sm" />
+                                ) : (
+                                    <Globe size={12} className="text-blue-400" />
+                                )}
+                                {newsItem.source}
                             </span>
                         )}
                     </div>
@@ -116,9 +139,6 @@ const NewsDetail: React.FC = () => {
                                 {newsItem.excerpt}
                             </p>
                         )}
-
-                        {/* Ad Inside Content */}
-                        <AdSpace label="Anúncio (Artigo Topo)" />
 
                         {/* Video Embed */}
                         {youtubeId ? (
@@ -178,7 +198,7 @@ const NewsDetail: React.FC = () => {
                             <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
                                 {displayGallery.map((img, idx) => (
                                     <div key={idx} className="relative aspect-[4/3] group overflow-hidden rounded-lg cursor-pointer bg-gray-100">
-                                        <img src={img} alt={`Galeria ${idx}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
+                                        <img src={img} alt={`Galeria ${idx}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" onError={(e) => (e.currentTarget.style.display = 'none')} />
                                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition"></div>
                                     </div>
                                 ))}
@@ -234,9 +254,6 @@ const NewsDetail: React.FC = () => {
                              ))}
                         </div>
                     </div>
-
-                    <AdSpace label="Publicidade Lateral (300x250)" height="h-64" />
-                    <AdSpace label="Publicidade Vertical (300x600)" height="h-[600px]" />
                 </aside>
             </div>
         </div>

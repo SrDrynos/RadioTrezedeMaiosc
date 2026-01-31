@@ -3,12 +3,14 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../../services/db';
 import { NewsItem, SiteSettings } from '../../types';
-import { Calendar, ChevronRight } from 'lucide-react';
+import { Calendar, ChevronRight, Radio } from 'lucide-react';
 import { RadioLogo } from '../../components/RadioLogo';
+import { SponsorsCarousel } from '../../components/SponsorsCarousel';
 
 const Home: React.FC = () => {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
+  const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const loadData = () => {
@@ -27,6 +29,10 @@ const Home: React.FC = () => {
         window.removeEventListener('storage', loadData);
     };
   }, []);
+
+  const handleImageError = (id: string) => {
+      setImgErrors(prev => ({ ...prev, [id]: true }));
+  };
 
   if (!settings) return <div className="p-10 text-center">Carregando...</div>;
 
@@ -52,14 +58,18 @@ const Home: React.FC = () => {
         <div className="container mx-auto px-4 h-full relative z-10 flex flex-col justify-center items-center pt-20">
             
             <div className="relative w-full max-w-6xl flex justify-between items-end h-full pb-10 md:pb-16 mt-10">
-                <div className="hidden md:block w-1/4 relative self-end mb-4 opacity-95 hover:scale-105 transition duration-700">
-                    <img 
-                        src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Castelo_Belvedere_Treze_de_Maio_SC_01.jpg/600px-Castelo_Belvedere_Treze_de_Maio_SC_01.jpg" 
-                        alt="Castelo Belvedere" 
-                        className="w-full h-auto object-contain drop-shadow-2xl rounded-lg transform -rotate-3 border-4 border-white/30 shadow-xl"
-                        style={{ filter: 'contrast(1.1) brightness(1.1)' }}
-                    />
-                </div>
+                
+                {/* Imagem Esquerda (Castelo) */}
+                {settings.heroLeftImageUrl && (
+                    <div className="hidden md:block w-1/4 relative self-end mb-4 opacity-95 hover:scale-105 transition duration-700">
+                        <img 
+                            src={settings.heroLeftImageUrl} 
+                            alt="Castelo Belvedere" 
+                            className="w-full h-auto object-contain drop-shadow-2xl transform -rotate-3"
+                            style={{ filter: 'contrast(1.1) brightness(1.1)' }}
+                        />
+                    </div>
+                )}
 
                 <div className="flex-1 flex flex-col items-center justify-center text-center px-4 md:-mt-20">
                     <div className="bg-blue-600/80 backdrop-blur-sm text-white px-4 py-1 rounded-full mb-6 transform -rotate-1 border border-blue-400 shadow-lg">
@@ -81,14 +91,17 @@ const Home: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="hidden md:block w-1/4 relative self-end mb-4 hover:scale-105 transition duration-700">
-                    <img 
-                        src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Nossa_Senhora_de_F%C3%A1tima_Treze_de_Maio.jpg/450px-Nossa_Senhora_de_F%C3%A1tima_Treze_de_Maio.jpg" 
-                        alt="Nossa Senhora de Fátima" 
-                        className="w-full h-auto object-contain drop-shadow-2xl rounded-lg transform rotate-3 border-4 border-white/30 shadow-xl"
-                        style={{ filter: 'contrast(1.1) brightness(1.1)' }}
-                    />
-                </div>
+                {/* Imagem Direita (Santa) */}
+                {settings.heroRightImageUrl && (
+                    <div className="hidden md:block w-1/4 relative self-end mb-4 hover:scale-105 transition duration-700">
+                        <img 
+                            src={settings.heroRightImageUrl} 
+                            alt="Nossa Senhora de Fátima" 
+                            className="w-full h-auto object-contain drop-shadow-2xl transform rotate-3"
+                            style={{ filter: 'contrast(1.1) brightness(1.1)' }}
+                        />
+                    </div>
+                )}
             </div>
         </div>
 
@@ -112,26 +125,41 @@ const Home: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {news.map(item => (
-                    <article key={item.id} className="group flex flex-col h-full bg-white shadow-md hover:shadow-2xl transition-all duration-300 rounded-2xl overflow-hidden border border-gray-100">
-                        <Link to={`/noticias/${item.id}`} className="h-56 overflow-hidden relative block">
-                             <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60"></div>
-                             <span className="absolute bottom-4 left-4 bg-yellow-400 text-blue-900 text-xs font-black px-3 py-1 rounded shadow uppercase tracking-wide">{item.category}</span>
-                        </Link>
-                        <div className="p-6 flex-1 flex flex-col">
-                            <div className="flex items-center text-gray-400 text-xs mb-3 gap-2 font-semibold uppercase">
-                                <Calendar size={14} className="text-green-500" />
-                                <span>{new Date(item.createdAt).toLocaleDateString('pt-BR')}</span>
-                            </div>
-                            <Link to={`/noticias/${item.id}`}>
-                                <h4 className="text-xl font-bold text-gray-800 mb-3 group-hover:text-blue-600 transition-colors leading-tight">{item.title}</h4>
+                {news.map(item => {
+                    const hasImgError = imgErrors[item.id] || !item.imageUrl;
+                    return (
+                        <article key={item.id} className="group flex flex-col h-full bg-white shadow-md hover:shadow-2xl transition-all duration-300 rounded-2xl overflow-hidden border border-gray-100">
+                            <Link to={`/noticias/${item.id}`} className="h-56 overflow-hidden relative block bg-slate-100">
+                                {hasImgError ? (
+                                    <div className="w-full h-full bg-gradient-to-br from-blue-900 to-slate-800 flex flex-col items-center justify-center text-white/80 p-6 text-center">
+                                        <Radio size={48} className="mb-2 opacity-50" />
+                                        <span className="text-xs font-bold uppercase tracking-widest opacity-50">Rádio Treze de Maio</span>
+                                    </div>
+                                ) : (
+                                    <img 
+                                        src={item.imageUrl} 
+                                        alt={item.title} 
+                                        onError={() => handleImageError(item.id)}
+                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
+                                    />
+                                )}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60 pointer-events-none"></div>
+                                <span className="absolute bottom-4 left-4 bg-yellow-400 text-blue-900 text-xs font-black px-3 py-1 rounded shadow uppercase tracking-wide z-10">{item.category}</span>
                             </Link>
-                            <p className="text-gray-600 text-sm line-clamp-3 mb-4 flex-1">{item.excerpt}</p>
-                            <Link to={`/noticias/${item.id}`} className="text-blue-600 font-bold text-sm hover:text-green-600 mt-auto flex items-center gap-1">Ler Mais <ChevronRight size={14} /></Link>
-                        </div>
-                    </article>
-                ))}
+                            <div className="p-6 flex-1 flex flex-col">
+                                <div className="flex items-center text-gray-400 text-xs mb-3 gap-2 font-semibold uppercase">
+                                    <Calendar size={14} className="text-green-500" />
+                                    <span>{new Date(item.createdAt).toLocaleDateString('pt-BR')}</span>
+                                </div>
+                                <Link to={`/noticias/${item.id}`}>
+                                    <h4 className="text-xl font-bold text-gray-800 mb-3 group-hover:text-blue-600 transition-colors leading-tight">{item.title}</h4>
+                                </Link>
+                                <p className="text-gray-600 text-sm line-clamp-3 mb-4 flex-1">{item.excerpt}</p>
+                                <Link to={`/noticias/${item.id}`} className="text-blue-600 font-bold text-sm hover:text-green-600 mt-auto flex items-center gap-1">Ler Mais <ChevronRight size={14} /></Link>
+                            </div>
+                        </article>
+                    );
+                })}
             </div>
         </div>
       </section>
@@ -172,6 +200,9 @@ const Home: React.FC = () => {
             </div>
          </div>
       </section>
+
+      {/* NEW: Sponsors Carousel */}
+      <SponsorsCarousel />
     </div>
   );
 };

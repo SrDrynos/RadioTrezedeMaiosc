@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Menu, X, Facebook, Instagram, Youtube, Phone, Play, Pause, Volume2, VolumeX, Tv } from 'lucide-react';
+import { Menu, X, Facebook, Instagram, Youtube, Phone, Play, Pause, Volume2, VolumeX, Tv, Rocket, Coins, ShoppingBag, FileText, Zap, Flame } from 'lucide-react';
 import { db } from '../services/db';
 import { SiteSettings } from '../types';
 import { RadioLogo } from './RadioLogo';
@@ -61,10 +61,20 @@ const PublicLayout: React.FC = () => {
     newAudio.preload = 'none';
     setAudio(newAudio);
 
+    // --- AUTOMATIC TRACKING (HEARTBEAT SYSTEM) ---
+    // 1. Rastreia imediatamente ao abrir o site
+    trackListener();
+
+    // 2. Mantém o rastreamento a cada 45 segundos (Ping)
+    const heartbeat = setInterval(() => {
+        trackListener();
+    }, 45000);
+
     // Cleanup
     return () => {
       window.removeEventListener('radio-settings-update', loadSettings);
       window.removeEventListener('storage', loadSettings);
+      clearInterval(heartbeat); // Stop tracking on unmount
       if (newAudio) {
         newAudio.pause();
         newAudio.src = '';
@@ -87,17 +97,19 @@ const PublicLayout: React.FC = () => {
       try {
           const deviceType = /Mobi|Android/i.test(navigator.userAgent) ? 'Celular' : 'Computador';
           
-          // Adiciona timestamp para evitar cache do navegador
+          // Adiciona timestamp para evitar cache do navegador e forçar o PHP a rodar
           const response = await fetch(`./tracker.php?device=${deviceType}&t=${Date.now()}`);
           
           if (response.ok) {
               const result = await response.json();
               if (result.success) {
-                  console.log("Ouvinte rastreado via servidor:", result.data.city);
+                  // Opcional: Log silencioso para debug, pode remover em produção
+                  // console.log("Ping enviado:", result.data.city);
               }
           }
       } catch (e) {
-          console.warn("Tracking indisponível (Dev mode ou erro de rede):", e);
+          // Falha silenciosa para não atrapalhar o usuário
+          // console.warn("Tracking indisponível");
       }
   };
 
@@ -110,7 +122,7 @@ const PublicLayout: React.FC = () => {
         console.error("Playback failed:", error);
         alert("Não foi possível iniciar o player. Verifique sua conexão.");
       });
-      // Trigger Tracking immediately
+      // Trigger Tracking immediately on Click as well (redundancy is good)
       trackListener();
     }
     setIsPlaying(!isPlaying);
@@ -212,7 +224,8 @@ const PublicLayout: React.FC = () => {
 
       {/* Footer */}
       <footer className="bg-gradient-to-b from-blue-900 to-black text-white pt-12 pb-28 md:pb-32 border-t-4 border-yellow-400">
-        <div className="container mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="container mx-auto px-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {/* Column 1: Info */}
             <div>
                 <div className="mb-6">
                      {/* Footer Logo also uses the Horizontal version */}
@@ -224,6 +237,63 @@ const PublicLayout: React.FC = () => {
                    <a href={settings.instagramUrl || "#"} target="_blank" rel="noopener noreferrer" className="w-8 h-8 bg-blue-700 rounded flex items-center justify-center cursor-pointer hover:bg-yellow-400 hover:text-blue-900 transition"><Instagram size={18} /></a>
                 </div>
             </div>
+
+            {/* Column 2: Startup Fluxx (Internal & External Links) */}
+            <div>
+                <h3 className="text-lg font-bold mb-4 text-green-400 uppercase tracking-wide flex items-center gap-2">
+                    <Rocket size={20} /> Startup Fluxx
+                </h3>
+                <ul className="space-y-2 text-gray-300 text-sm font-medium">
+                    <li>
+                        <Link to="/fluxx" className="hover:text-yellow-400 transition flex items-center gap-2 group">
+                            <Rocket size={14} className="text-gray-400 group-hover:text-yellow-400" /> A Startup
+                        </Link>
+                    </li>
+                    <li>
+                        <Link to="/proto-token" className="hover:text-yellow-400 transition flex items-center gap-2 group">
+                            <Coins size={14} className="text-blue-400 group-hover:text-yellow-400" /> Criptomoeda Proto
+                        </Link>
+                    </li>
+                    <li>
+                        <Link to="/hub-stream" className="hover:text-yellow-400 transition flex items-center gap-2 group">
+                            <Tv size={14} className="text-purple-400 group-hover:text-yellow-400" /> Hub Fluxx Stream
+                        </Link>
+                    </li>
+                    <li>
+                        <Link to="/proto-rider" className="hover:text-yellow-400 transition flex items-center gap-2 group">
+                            <Zap size={14} className="text-yellow-400 group-hover:text-white" /> App Proto Rider
+                        </Link>
+                    </li>
+                    <li>
+                        <Link to="/grau-shop" className="hover:text-yellow-400 transition flex items-center gap-2 group">
+                            <ShoppingBag size={14} className="text-green-400 group-hover:text-yellow-400" /> Grau Shop
+                        </Link>
+                    </li>
+                    <li>
+                        <Link to="/loucos-por-grau" className="hover:text-yellow-400 transition flex items-center gap-2 group">
+                            <Flame size={14} className="text-red-500 group-hover:text-yellow-400" /> Loucos por Grau
+                        </Link>
+                    </li>
+                    
+                    <li className="pt-2 border-t border-blue-800/50 mt-2"></li>
+                    
+                    {/* Links Externos para Documentação */}
+                    <li><a href="https://protostream.com.br/tokenomics" target="_blank" rel="noopener noreferrer" className="hover:text-yellow-400 transition opacity-70 text-xs flex items-center gap-1"><FileText size={12} /> Tokenomics</a></li>
+                    <li><a href="https://protostream.com.br/whitepaper" target="_blank" rel="noopener noreferrer" className="hover:text-yellow-400 transition opacity-70 text-xs flex items-center gap-1"><FileText size={12} /> Whitepaper</a></li>
+                    <li><a href="https://protostream.com.br/roadmap" target="_blank" rel="noopener noreferrer" className="hover:text-yellow-400 transition opacity-70 text-xs flex items-center gap-1"><FileText size={12} /> Roadmap</a></li>
+
+                    <li className="pt-3">
+                        <a href="https://protostream.com.br/buy" target="_blank" rel="noopener noreferrer" className="block w-full text-center bg-yellow-500 hover:bg-yellow-400 text-black font-black text-xs py-2 rounded shadow-lg transition transform hover:scale-105 mb-2">
+                            COMPRE A ICO
+                        </a>
+                        <a href="https://www.orca.so/pools/4euzSfU7FjJXybMGeYW2WSra7hw1kaZovhWVDfJkcrga" target="_blank" rel="noopener noreferrer" className="block w-full text-center bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-2 rounded shadow-lg transition transform hover:scale-105">
+                            LIQUIDEZ (ORCA)
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            {/* Column 3: Quick Links */}
             <div>
                 <h3 className="text-lg font-bold mb-4 text-green-400 uppercase tracking-wide">Links Rápidos</h3>
                 <ul className="space-y-2 text-gray-300 text-sm font-medium">
@@ -235,11 +305,19 @@ const PublicLayout: React.FC = () => {
                     <li><Link to="/admin" className="hover:text-yellow-400 transition opacity-50">Área Administrativa</Link></li>
                 </ul>
             </div>
+
+            {/* Column 4: Legal & Contact */}
             <div>
-                 <h3 className="text-lg font-bold mb-4 text-green-400 uppercase tracking-wide">Contato</h3>
+                 <h3 className="text-lg font-bold mb-4 text-green-400 uppercase tracking-wide">Legal & Contato</h3>
                  <p className="text-gray-300 text-sm mb-2">{settings.address}</p>
                  <p className="text-gray-300 text-sm mb-2 flex items-center gap-2"><Phone size={14} className="text-yellow-400"/> {settings.phone}</p>
-                 <p className="text-gray-300 text-sm flex items-center gap-2"><span className="text-yellow-400">@</span> {settings.email}</p>
+                 <p className="text-gray-300 text-sm flex items-center gap-2 mb-4"><span className="text-yellow-400">@</span> {settings.email}</p>
+                 
+                 <div className="flex flex-col space-y-1 text-xs text-gray-400">
+                    <Link to="/politica-de-privacidade" className="hover:text-white hover:underline">Política de Privacidade</Link>
+                    <Link to="/politica-de-cookies" className="hover:text-white hover:underline">Política de Cookies</Link>
+                    <Link to="/termos-de-uso" className="hover:text-white hover:underline">Termos de Uso</Link>
+                 </div>
             </div>
         </div>
         <div className="border-t border-blue-800 mt-8 pt-6 text-center text-xs text-gray-500 font-medium">

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Radio, BarChart3, Tv, FileText, Music, Users } from 'lucide-react';
+import { Radio, BarChart3, Tv, FileText, Music, HeartHandshake } from 'lucide-react';
 
 const AdminPanel: React.FC = () => {
   return (
@@ -61,6 +61,15 @@ const AdminPanel: React.FC = () => {
             </div>
             <h3 className="text-xl font-bold text-gray-800 mb-1">Pedidos Musicais</h3>
             <p className="text-gray-500 text-sm">Ver pedidos dos ouvintes.</p>
+        </Link>
+
+        {/* Atalho Patrocinadores */}
+        <Link to="/admin/patrocinadores" className="bg-white rounded-xl p-6 shadow hover:shadow-lg transition transform hover:-translate-y-1 border border-gray-100 group">
+             <div className="bg-yellow-100 w-12 h-12 rounded-lg flex items-center justify-center mb-4 text-yellow-600 group-hover:bg-yellow-600 group-hover:text-white transition">
+                <HeartHandshake size={24} />
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-1">Patrocinadores</h3>
+            <p className="text-gray-500 text-sm">Gerenciar logos do rodapé.</p>
         </Link>
 
       </div>

@@ -6,7 +6,7 @@ export interface NewsItem {
   slug?: string; // New: SEO friendly URL part
   excerpt: string; // Mini description (SEO)
   content: string; // Can be HTML now
-  category: 'Treze de Maio - SC' | 'Região' | 'Avisos'; // Enforce strict category
+  category: 'Treze de Maio - SC' | 'Cidades Vizinhas' | 'Região' | 'Avisos'; // Enforce strict category
   imageUrl: string; // Main Thumbnail
   gallery?: string[]; // New: Up to 5 images
   videoUrl?: string; // New: YouTube/Social link
@@ -57,11 +57,21 @@ export interface TVItem {
   duration: string; // Display string like "05:00" or "Ao Vivo"
 }
 
+export interface Sponsor {
+  id: string;
+  name: string;
+  imageUrl: string;
+  externalUrl?: string; // Link para o site/insta da empresa
+  createdAt: string;
+}
+
 export interface SiteSettings {
   streamUrl: string;
   radioName: string;
   logoUrl?: string; // Arte Central (Hero)
   headerLogoUrl?: string; // Logo do Topo e Rodapé (Horizontal)
+  heroLeftImageUrl?: string; // Imagem Decorativa Esquerda (Ex: Castelo)
+  heroRightImageUrl?: string; // Imagem Decorativa Direita (Ex: Santa)
   phone: string;
   whatsapp: string;
   email: string;

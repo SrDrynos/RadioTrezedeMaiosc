@@ -4,30 +4,38 @@ import { db } from './db';
 
 export const newsAutomationService = {
   /**
-   * Processa o JSON recebido via API/Webhook
+   * Processa o JSON recebido via API/Webhook (Integração direta)
    */
   processIncomingData: (data: IncomingWebhookData) => {
-    // 1. Validação da Cidade (Rigorosa)
     const normalizedCity = (data.cidade || "").toLowerCase();
     const normalizedContent = (data.titulo + " " + data.conteudo_html).toLowerCase();
     
-    // Regra Crítica: Deve mencionar Treze de Maio
     if (!normalizedCity.includes("treze de maio") && !normalizedContent.includes("treze de maio")) {
       return { success: false, message: `FONTE NÃO AUTORIZADA – CONTEÚDO IGNORADO (Não menciona Treze de Maio)` };
     }
 
-    // 2. Validação da Nota (Qualidade)
+    // Duplication Check for Webhook
+    const allNews = [...db.getNews(), ...db.getRejectedNews()];
+    if (checkDuplication(data.titulo, allNews)) {
+       return { success: false, message: `REJEITADA: Notícia similar já existe no sistema.` };
+    }
+
     if (data.nota < 7.5) {
       return { success: false, message: `NOTÍCIA REPROVADA – SCORE INSUFICIENTE (${data.nota}/10)` };
     }
 
-    const excerpt = stripHtml(data.conteudo_html).substring(0, 160) + "...";
+    // VERIFICAÇÃO DE PALAVRAS (MÍNIMO 500)
+    const plainText = stripHtml(data.conteudo_html);
+    const wordCount = plainText.trim().split(/\s+/).filter(w => w.length > 0).length;
     
-    // Tenta extrair imagem original do HTML
-    const extractedImage = extractImageFromHtml(data.conteudo_html);
+    if (wordCount < 500) {
+        return { success: false, message: `REJEITADA: Conteúdo muito curto (${wordCount} palavras). Mínimo exigido: 500.` };
+    }
+
+    const excerpt = stripHtml(data.conteudo_html).substring(0, 160) + "...";
+    const extractedImage = findBestImage({ description: data.conteudo_html, content: data.conteudo_html });
     const finalImage = extractedImage || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?q=80&w=1000&auto=format&fit=crop';
 
-    // Formata o conteúdo seguindo o padrão estrito solicitado
     const formattedHtml = generateSeoStructure({
         title: data.titulo,
         content: data.conteudo_html,
@@ -42,17 +50,18 @@ export const newsAutomationService = {
       category: 'Treze de Maio - SC',
       imageUrl: finalImage,
       createdAt: data.data_publicacao || new Date().toISOString(),
-      published: true,
+      published: false, // ALTERADO: Agora vai para Curadoria (Rascunho)
       source: data.fonte || "Redação Automática",
       tags: data.tags
     };
 
     db.saveNewsItem(newNewsItem);
-    return { success: true, message: `APROVADA: Notícia publicada com sucesso! (Nota: ${data.nota})` };
+    return { success: true, message: `SUCESSO: Notícia enviada para Curadoria para revisão. (Nota: ${data.nota})` };
   },
 
   /**
-   * Syncs with RSS feeds using the strict rules
+   * NOVA VERSÃO: Sincroniza feeds RSS usando Parser XML Nativo e Proxy Raw
+   * Ignora limites de API de terceiros para garantir que tudo seja lido.
    */
   async syncRSSFeeds(urls: string[]) {
     if (!urls || urls.length === 0) return { count: 0, message: "Nenhuma URL RSS configurada." };
@@ -60,123 +69,274 @@ export const newsAutomationService = {
     let addedCount = 0;
     let rejectedCount = 0;
     
-    const existingTitles = new Set(db.getNews().map(n => n.title));
-    const rejectedTitles = new Set(db.getRejectedNews().map(n => n.title));
+    // Carrega TODAS as notícias para comparação (inclusive as recém adicionadas no loop)
+    // Otimização: Pegar apenas as últimas 200 para não pesar o navegador
+    const allExistingItems = [...db.getNews(), ...db.getRejectedNews()].slice(0, 200);
+    const processedInThisBatch: NewsItem[] = [];
 
     for (const url of urls) {
        try {
-         const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`);
-         const data = await res.json();
-         const feedTitle = data.feed?.title || "Internet";
-         
-         if (data.status === 'ok' && Array.isArray(data.items)) {
-           for (const item of data.items) {
-             
-             if (existingTitles.has(item.title) || rejectedTitles.has(item.title)) continue;
+         // 1. Busca o XML Bruto (Bypassing CORS via Proxy)
+         const xmlText = await fetchRawRSS(url);
+         if (!xmlText) continue;
 
-             // Clean Content
-             const cleanContent = item.content || item.description || "";
-             const fullText = (item.title + " " + cleanContent).toLowerCase();
+         // 2. Parseia o XML no Navegador
+         const parser = new DOMParser();
+         const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+         
+         const feedTitle = xmlDoc.querySelector("channel > title")?.textContent || "Internet";
+         const items = Array.from(xmlDoc.querySelectorAll("item"));
+
+         for (const itemNode of items) {
+             const title = itemNode.querySelector("title")?.textContent || "";
              
-             // Common Props for both Accepted and Rejected
-             const pubDate = new Date(item.pubDate.replace(/-/g, '/'));
-             const image = item.enclosure?.link || item.thumbnail || extractImageFromHtml(cleanContent) || 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?q=80&w=1000';
+             // --- VERIFICAÇÃO DE DUPLICIDADE AVANÇADA ---
+             // Verifica contra o banco de dados E contra itens processados neste ciclo
+             if (checkDuplication(title, [...allExistingItems, ...processedInThisBatch])) {
+                 continue; // Pula silenciosamente se for duplicata exata ou muito parecida
+             }
+
+             // Extração de Dados do XML
+             const link = itemNode.querySelector("link")?.textContent || "";
+             const pubDateStr = itemNode.querySelector("pubDate")?.textContent || "";
              
-             // --- FORMATTING: APPLY STRICT TEMPLATE HERE ---
-             const formattedHtml = generateSeoStructure(item, feedTitle);
+             // Content: Tenta pegar o content:encoded, senão description
+             const encodedContent = itemNode.getElementsByTagNameNS("*", "encoded")[0]?.textContent;
+             const description = itemNode.querySelector("description")?.textContent || "";
+             const rawContent = encodedContent || description || "";
+             
+             const fullText = (title + " " + rawContent).toLowerCase();
+             
+             // Contagem de Palavras
+             const plainText = stripHtml(rawContent);
+             const wordCount = plainText.trim().split(/\s+/).filter(w => w.length > 0).length;
+
+             // Data parsing robusto
+             let pubDate = new Date();
+             if (pubDateStr) {
+                 pubDate = new Date(pubDateStr);
+                 if (isNaN(pubDate.getTime())) pubDate = new Date();
+             }
+
+             // Extração de Imagem
+             const image = extractImageFromXMLItem(itemNode, rawContent);
+
+             // SEO Formatting
+             const formattedHtml = generateSeoStructure({
+                 title,
+                 content: rawContent,
+                 pubDate: pubDate.toISOString()
+             }, feedTitle);
 
              const newItem: NewsItem = {
                  id: Date.now().toString() + Math.random().toString().slice(2,5),
-                 title: item.title, 
-                 subtitle: item.title, 
+                 title: title, 
+                 subtitle: title, // Fallback
                  content: formattedHtml, 
-                 excerpt: stripHtml(item.description || cleanContent).substring(0, 150) + "...",
+                 excerpt: stripHtml(description).substring(0, 150) + "...",
                  category: determineCategory(fullText),
                  imageUrl: image,
                  gallery: [image],
                  createdAt: pubDate.toISOString(),
-                 published: true,
+                 published: false, // ALTERADO: Agora vai para Curadoria (Rascunho)
                  source: feedTitle,
+                 sourceUrl: link,
                  tags: ['Automático', 'RSS']
              };
 
-             // --- VALIDATION RULES ---
-             
+             // --- REGRAS DE FILTRAGEM (ATUALIZADAS PARA 7 DIAS) ---
              let rejectionReason = null;
 
-             // 1. FILTRO DE LOCALIZAÇÃO (REGRA CRÍTICA)
-             if (!fullText.includes("treze de maio")) {
-                 rejectionReason = "Localização (Não menciona Treze de Maio)";
+             const today = new Date();
+             const timeDiff = today.getTime() - pubDate.getTime();
+             const hoursDiff = timeDiff / (1000 * 3600); // Horas
+
+             // REGRA 0: Contagem de Palavras (NOVO)
+             if (wordCount < 500) {
+                 rejectionReason = `Conteúdo muito curto (${wordCount} palavras). Mínimo 500.`;
              }
 
-             // 2. DATE FILTER (Last 5 days to be safe)
+             // REGRA 1: Localização
+             const isLocal = newItem.category === 'Treze de Maio - SC';
+             const isNeighbor = newItem.category === 'Cidades Vizinhas';
+
              if (!rejectionReason) {
-                const today = new Date();
-                const timeDiff = today.getTime() - pubDate.getTime();
-                const daysDiff = timeDiff / (1000 * 3600 * 24);
-                if (daysDiff > 5) {
-                    rejectionReason = "Notícia Antiga (> 5 dias)";
+                if (!isLocal && !isNeighbor) {
+                    // É Região Genérica ou Outros
+                    // JANELA AUMENTADA PARA 168 HORAS (7 DIAS)
+                    if (hoursDiff <= 168) {
+                        rejectionReason = "Revisão: Notícia Regional Genérica (Verificar relevância)";
+                    } else {
+                        rejectionReason = "Localização (Fora da área de cobertura direta)";
+                    }
+                } else if (isNeighbor && hoursDiff > 120) {
+                    // Cidades vizinhas tem uma tolerância um pouco menor que local (5 dias)
+                    rejectionReason = "Notícia Vizinha Antiga (> 5 dias)";
+                } else if (isLocal && hoursDiff > 168) {
+                    rejectionReason = "Notícia Local Antiga (> 7 dias)";
                 }
              }
 
-             // 3. ANÁLISE E CLASSIFICAÇÃO (SCORE)
+             // REGRA 3: Score Baixo (Menos rigoroso para quarentena)
              if (!rejectionReason) {
-                 const score = calculateScore(item, fullText);
-                 if (score < 7.5) {
+                 const score = calculateScore(newItem, fullText);
+                 if (score < 6.0) { 
                      rejectionReason = `Score Baixo (${score}/10)`;
                  }
              }
 
-             // --- DECISION ---
+             // --- PERSISTÊNCIA ---
              if (rejectionReason) {
-                 // Save to Quarantine
-                 newItem.published = false;
+                 newItem.id = "REJ_" + newItem.id; 
                  newItem.rejectionReason = rejectionReason;
-                 newItem.id = "REJ_" + newItem.id; // Mark ID
                  db.saveRejectedNews(newItem);
                  rejectedCount++;
-                 rejectedTitles.add(item.title);
+                 
+                 // Adiciona à lista temporária para evitar que o mesmo feed adicione a mesma rejeição 2x
+                 processedInThisBatch.push(newItem);
              } else {
-                 // Publish
+                 // Se passou, salva mas como Rascunho (published: false)
                  db.saveNewsItem(newItem);
-                 existingTitles.add(item.title);
                  addedCount++;
+                 processedInThisBatch.push(newItem);
              }
-           }
          }
+
        } catch(e) {
-         console.error("Error fetching RSS:", url, e);
+         console.error("Error fetching RSS XML:", url, e);
        }
     }
     
     return { 
         count: addedCount, 
-        message: `${addedCount} publicadas. ${rejectedCount} enviadas para análise (Rejeitadas).` 
+        message: `${addedCount} enviadas para Curadoria. ${rejectedCount} rejeitadas automaticamente.` 
     };
   }
 };
 
-// --- HELPER FUNCTIONS FOR LOGIC ---
+// --- HELPER PARA BAIXAR XML VIA PROXY ---
+async function fetchRawRSS(url: string): Promise<string | null> {
+    try {
+        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+        return data.contents;
+    } catch (e) {
+        try {
+            const res2 = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+            return await res2.text();
+        } catch (e2) {
+            console.error("Falha em todos os proxies RSS", url);
+            return null;
+        }
+    }
+}
+
+// --- DUPLICATION & SIMILARITY CHECKERS ---
+
+function normalizeForComparison(str: string): string {
+    return str
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove acentos
+        .replace(/[^\w\s]/g, "") // Remove pontuação
+        .replace(/\s+/g, " ") // Remove espaços extras
+        .trim();
+}
+
+function getTokens(str: string): Set<string> {
+    // Palavras irrelevantes para comparação
+    const stopWords = new Set(['a', 'o', 'as', 'os', 'de', 'da', 'do', 'em', 'na', 'no', 'e', 'para', 'com', 'por', 'um', 'uma']);
+    const tokens = normalizeForComparison(str).split(" ");
+    return new Set(tokens.filter(t => t.length > 2 && !stopWords.has(t)));
+}
+
+function calculateSimilarity(str1: string, str2: string): number {
+    const tokens1 = getTokens(str1);
+    const tokens2 = getTokens(str2);
+
+    if (tokens1.size === 0 || tokens2.size === 0) return 0;
+
+    // Jaccard Index: (Interseção) / (União)
+    const intersection = new Set([...tokens1].filter(x => tokens2.has(x)));
+    const union = new Set([...tokens1, ...tokens2]);
+
+    return intersection.size / union.size;
+}
+
+function checkDuplication(title: string, existingItems: NewsItem[]): boolean {
+    // 1. Verificação Exata (Rápida)
+    const exactMatch = existingItems.some(item => item.title === title);
+    if (exactMatch) return true;
+
+    // 2. Verificação de Similaridade (Lenta/Fuzzy)
+    // Limite: 60% de similaridade nas palavras-chave considera duplicata
+    const SIMILARITY_THRESHOLD = 0.6;
+    
+    return existingItems.some(item => {
+        const sim = calculateSimilarity(title, item.title);
+        return sim > SIMILARITY_THRESHOLD;
+    });
+}
+
+// --- INTELLIGENCE FUNCTIONS ---
+
+function extractImageFromXMLItem(itemNode: Element, htmlContent: string): string {
+    const fallback = 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?q=80&w=1000';
+
+    const enclosure = itemNode.querySelector("enclosure");
+    if (enclosure) {
+        const type = enclosure.getAttribute("type");
+        const url = enclosure.getAttribute("url");
+        if (type && type.startsWith("image") && url) return url;
+        if (url && isImage(url)) return url;
+    }
+
+    const mediaContent = itemNode.getElementsByTagNameNS("*", "content");
+    for(let i=0; i<mediaContent.length; i++) {
+        const url = mediaContent[i].getAttribute("url");
+        const type = mediaContent[i].getAttribute("type");
+        if (url && (!type || type.startsWith("image") || isImage(url))) return url;
+    }
+
+    const mediaThumb = itemNode.getElementsByTagNameNS("*", "thumbnail");
+    if (mediaThumb.length > 0) {
+        const url = mediaThumb[0].getAttribute("url");
+        if (url) return url;
+    }
+
+    const htmlImg = extractImageFromHtml(htmlContent);
+    if (htmlImg) return htmlImg;
+
+    return fallback;
+}
+
+function isImage(url: string) {
+    if (!url) return false;
+    return url.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null;
+}
+
+function isValidImageUrl(url: string): boolean {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    const blacklist = ['pixel', 'tracker', 'analytics', 'facebook.com/tr', 'imp?', 'shim.gif', 'doubleclick', 'feedburner'];
+    if (blacklist.some(term => lower.includes(term))) return false;
+    if (lower.match(/\.(jpeg|jpg|gif|png|webp|bmp)/)) return true;
+    if (url.length > 20 && url.includes('http')) return true;
+    return false;
+}
 
 function calculateScore(item: any, text: string): number {
     let score = 0;
+    const title = (item.title || "").toLowerCase();
     
-    // Relevância Local (0-3)
-    if (item.title.toLowerCase().includes("treze de maio")) score += 3;
-    else if (text.includes("treze de maio")) score += 2;
+    if (title.includes("treze de maio")) score += 4; 
+    else if (text.includes("treze de maio")) score += 3;
     
-    // Interesse Público / Palavras-chave (0-2)
-    const keywords = ["incêndio", "obras", "saúde", "prefeitura", "festa", "acidente", "polícia", "bombeiros", "segurança", "evento", "comunicado", "falecimento", "nota", "censo", "ibge", "população"];
-    const hasKeyword = keywords.some(k => text.includes(k));
-    if (hasKeyword) score += 2;
+    const keywords = ["incêndio", "obras", "saúde", "prefeitura", "festa", "acidente", "polícia", "bombeiros", "segurança", "evento", "comunicado", "falecimento", "nota", "censo", "ibge", "população", "vagas", "emprego", "processo seletivo", "concurso", "edital", "eleição", "clima"];
+    
+    if (keywords.some(k => text.includes(k))) score += 2;
 
-    // Atualidade (0-2)
     score += 2; 
-
-    // Clareza/Multimídia (0-1)
-    if (item.thumbnail || item.enclosure) score += 1;
-
-    // SEO Regional (0-2)
+    
     if (text.includes("santa catarina") || text.includes("sc")) score += 2;
 
     return Math.min(score, 10);
@@ -184,74 +344,54 @@ function calculateScore(item: any, text: string): number {
 
 function generateSeoStructure(item: any, sourceName: string): string {
     const title = item.title || "";
-    let rawDesc = stripHtml(item.description || item.content || "").trim();
+    let rawDesc = stripHtml(item.content || item.description || "").trim();
     
-    // Limpeza de artefatos comuns de RSS
     rawDesc = rawDesc.replace(/Leia mais.*/i, '').replace(/\.\.\.$/, '').replace(/&nbsp;/g, ' ');
 
-    // CORREÇÃO CRÍTICA DE REPETIÇÃO:
-    // Verifica se a descrição começa com o título (comum em RSS do Google News)
     if (rawDesc.toLowerCase().startsWith(title.toLowerCase())) {
-        // Remove o título do início do texto
         rawDesc = rawDesc.substring(title.length).trim();
-        // Remove pontuações soltas que sobram (ex: " - Texto...")
         rawDesc = rawDesc.replace(/^[\s\-\:\.]+/g, '');
     }
 
-    // Quebra o texto em sentenças para tentar estruturar
     const parts = rawDesc.split('. ').filter(s => s.length > 20);
-    
-    // Introdução (1 ou 2 primeiras frases)
     const intro = parts.slice(0, 2).join('. ') + (parts.length > 0 ? '.' : '');
-    
-    // Restante do conteúdo
     const remainder = parts.slice(2).join('. ') + (parts.length > 2 ? '.' : '');
 
-    // Formatação da Data em Português (Ex: 28 de junho de 2023)
     const dateObj = item.pubDate ? new Date(item.pubDate) : new Date();
     const dateStr = dateObj.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 
-    // REMOVIDO: let html = `<h1>${title}</h1>`; 
-    // MOTIVO: O título já aparece no cabeçalho da página de notícias, causava duplicação.
     let html = "";
     
-    // Só adiciona intro se tiver conteúdo real
-    if (intro.length > 10) {
-        html += `<p>${intro}</p>`;
-    }
-
+    if (intro.length > 10) html += `<p>${intro}</p>`;
+    
     if (remainder.length > 50) {
-        html += `<h2>Detalhes da informação</h2>`;
+        html += `<h2>Detalhes da Notícia</h2>`;
         html += `<p>${remainder}</p>`;
-        
-        if (remainder.length > 400) {
-             html += `<h3>Informações adicionais</h3>`;
-             html += `<p>O fato repercute na região e mobiliza a atenção da comunidade de Treze de Maio.</p>`;
-        }
-    } else {
-        html += `<h2>Contexto</h2>`;
-        html += `<p>Esta informação é de vital importância para o dia a dia e o planejamento dos moradores de Treze de Maio e arredores.</p>`;
+    } else if (rawDesc.length > intro.length) {
+         html += `<p>${rawDesc}</p>`;
     }
 
-    // Parágrafo Padrão de Encerramento e Rodapé
     html += `
       <br/>
-      <p>A Rádio Treze de Maio segue acompanhando e divulgando informações de interesse público, mantendo a população informada sobre dados relevantes que impactam diretamente a vida no município.</p>
-      
-      <br/>
-      <p>
-      📅 Data: ${dateStr}<br/>
-      📰 Redação: Rádio Treze de Maio<br/>
-      📌 Fonte: ${sourceName}
+      <hr/>
+      <p style="font-size: 0.9em; color: #666;">
+      📅 <strong>Data:</strong> ${dateStr}<br/>
+      📌 <strong>Fonte Original:</strong> ${sourceName}<br/>
+      📰 <strong>Curadoria:</strong> Rádio Treze de Maio
       </p>
     `;
 
     return html;
 }
 
-function determineCategory(text: string): 'Treze de Maio - SC' | 'Região' | 'Avisos' {
-    if (text.includes("aviso") || text.includes("comunicado") || text.includes("falecimento") || text.includes("nota")) return 'Avisos';
-    if (text.includes("prefeitura") || text.includes("centro") || text.includes("bairro")) return 'Treze de Maio - SC';
+function determineCategory(text: string): 'Treze de Maio - SC' | 'Cidades Vizinhas' | 'Região' | 'Avisos' {
+    if (text.includes("aviso") || text.includes("comunicado") || text.includes("falecimento") || text.includes("nota") || text.includes("vaga") || text.includes("emprego") || text.includes("concurso")) return 'Avisos';
+    
+    if (text.includes("prefeitura de treze") || text.includes("treze de maio")) return 'Treze de Maio - SC';
+
+    const vizinhas = ["tubarão", "jaguaruna", "sangão", "pedras grandes", "morro da fumaça", "cocal do sul", "urussanga", "capivari de baixo", "gravatal", "armazém"];
+    if (vizinhas.some(city => text.includes(city))) return 'Cidades Vizinhas';
+
     return 'Região';
 }
 
@@ -262,27 +402,41 @@ function stripHtml(html: string) {
    return tmp.textContent || tmp.innerText || "";
 }
 
-function extractImageSrc(html: string) {
-    const tmp = document.createElement("DIV");
-    tmp.innerHTML = html;
-    const img = tmp.querySelector('img');
-    return img ? img.src : null;
-}
-
-// Improved Extractor using DOM Parser instead of regex for better reliability
 function extractImageFromHtml(html: string) {
     if(!html) return null;
     try {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        const img = doc.querySelector('img');
-        if (img && img.src) {
-            return img.src;
+        const imgs = doc.querySelectorAll('img');
+        for (let i = 0; i < imgs.length; i++) {
+            const img = imgs[i];
+            const src = img.src;
+            if (!src || src.length < 10) continue;
+            // Filtros anti-tracker
+            const w = img.getAttribute('width');
+            const h = img.getAttribute('height');
+            if (w && parseInt(w) <= 1) continue;
+            if (h && parseInt(h) <= 1) continue;
+            
+            if (isValidImageUrl(src)) return src;
         }
-        // Fallback for regex if DOMParser fails in non-standard environment (rare in browser)
-        const match = html.match(/<img[^>]+src="([^">]+)"/);
-        return match ? match[1] : null;
-    } catch (e) {
-        return null;
+    } catch (e) {}
+    
+    const regexMatch = html.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i);
+    if (regexMatch && regexMatch[1]) {
+        if (isValidImageUrl(regexMatch[1])) return regexMatch[1];
     }
+    return null;
+}
+
+function findBestImage(data: { description?: string, content?: string }): string | null {
+    if (data.content) {
+        const img = extractImageFromHtml(data.content);
+        if (img) return img;
+    }
+    if (data.description) {
+        const img = extractImageFromHtml(data.description);
+        if (img) return img;
+    }
+    return null;
 }

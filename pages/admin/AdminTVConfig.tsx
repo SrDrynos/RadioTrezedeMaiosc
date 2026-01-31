@@ -13,9 +13,11 @@ const AdminTVConfig: React.FC = () => {
   // State for new item
   const [newItemUrl, setNewItemUrl] = useState('');
   const [newItemTitle, setNewItemTitle] = useState('');
-  const [newItemType, setNewItemType] = useState<'video' | 'commercial' | 'live'>('commercial');
-  const [inputMode, setInputMode] = useState<'youtube' | 'upload'>('youtube');
-  const [newItemDuration, setNewItemDuration] = useState(''); // Agora usado como "Fonte"
+  
+  // Simplificado: Apenas 'video' (Upload) ou 'live' (Ao Vivo)
+  const [newItemType, setNewItemType] = useState<'video' | 'live'>('video');
+  const [inputMode, setInputMode] = useState<'youtube' | 'upload'>('upload');
+  const [newItemDuration, setNewItemDuration] = useState(''); 
 
   // Preview State
   const [previewIndex, setPreviewIndex] = useState(0);
@@ -68,7 +70,7 @@ const AdminTVConfig: React.FC = () => {
       let finalUrl = newItemUrl;
       const ytId = getYoutubeId(newItemUrl);
       
-      // Se for YouTube, normaliza. Se for upload (MP4), mantém a URL.
+      // Se for YouTube (Live usa input youtube), normaliza.
       if (inputMode === 'youtube' && ytId) {
           finalUrl = `https://www.youtube.com/embed/${ytId}`;
       }
@@ -78,7 +80,6 @@ const AdminTVConfig: React.FC = () => {
           title: newItemTitle,
           type: newItemType,
           url: finalUrl,
-          // Se for LIVE, força "Ao Vivo". Se não, usa o que o usuário digitou no campo Fonte (newItemDuration)
           duration: newItemType === 'live' ? 'Ao Vivo' : (newItemDuration || 'Própria')
       };
 
@@ -86,7 +87,10 @@ const AdminTVConfig: React.FC = () => {
       setNewItemUrl('');
       setNewItemTitle('');
       setNewItemDuration('');
-      setInputMode('youtube'); // Reset to default
+      
+      // Reset to Upload default
+      setNewItemType('video');
+      setInputMode('upload');
   };
 
   const handleRemoveItem = (index: number) => {
@@ -182,12 +186,20 @@ const AdminTVConfig: React.FC = () => {
                     </h3>
                     
                     <div className="space-y-4">
-                        {/* TYPE SELECTOR */}
+                        {/* TYPE SELECTOR SIMPLIFICADO */}
                         <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
-                            <button onClick={() => { setNewItemType('commercial'); setInputMode('youtube'); }} className={`flex-1 py-2 text-[10px] font-bold rounded-md transition ${newItemType === 'commercial' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}>COMERCIAL</button>
-                            <button onClick={() => { setNewItemType('video'); setInputMode('youtube'); }} className={`flex-1 py-2 text-[10px] font-bold rounded-md transition ${newItemType === 'video' && inputMode === 'youtube' ? 'bg-white shadow text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}>YOUTUBE</button>
-                            <button onClick={() => { setNewItemType('video'); setInputMode('upload'); }} className={`flex-1 py-2 text-[10px] font-bold rounded-md transition flex items-center justify-center gap-1 ${inputMode === 'upload' ? 'bg-white shadow text-green-700' : 'text-gray-500 hover:text-gray-700'}`}><Upload size={10} /> UPLOAD</button>
-                            <button onClick={() => { setNewItemType('live'); setInputMode('youtube'); setNewItemDuration('Ao Vivo'); }} className={`flex-1 py-2 text-[10px] font-bold rounded-md transition flex items-center justify-center gap-1 ${newItemType === 'live' ? 'bg-red-600 shadow text-white' : 'text-gray-500 hover:text-gray-700'}`}><Signal size={10} /> LIVE</button>
+                            <button 
+                                onClick={() => { setNewItemType('video'); setInputMode('upload'); }} 
+                                className={`flex-1 py-2 text-xs font-bold rounded-md transition flex items-center justify-center gap-1 ${inputMode === 'upload' && newItemType !== 'live' ? 'bg-white shadow text-green-700' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                <Upload size={14} /> UPLOAD
+                            </button>
+                            <button 
+                                onClick={() => { setNewItemType('live'); setInputMode('youtube'); setNewItemDuration('Ao Vivo'); }} 
+                                className={`flex-1 py-2 text-xs font-bold rounded-md transition flex items-center justify-center gap-1 ${newItemType === 'live' ? 'bg-red-600 shadow text-white' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                <Signal size={14} /> AO VIVO
+                            </button>
                         </div>
 
                         <div>
@@ -226,7 +238,7 @@ const AdminTVConfig: React.FC = () => {
                             </div>
                         ) : (
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">Link do YouTube</label>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">Link do YouTube (Live)</label>
                                 <div className="relative">
                                     <Youtube size={16} className="absolute left-3 top-3 text-gray-400" />
                                     <input 
@@ -253,9 +265,9 @@ const AdminTVConfig: React.FC = () => {
                         <button 
                             onClick={handleAddItem}
                             disabled={!newItemUrl || !newItemTitle}
-                            className={`w-full text-white font-bold py-2 rounded transition shadow ${inputMode === 'upload' ? 'bg-green-600 hover:bg-green-700' : 'bg-purple-600 hover:bg-purple-700'}`}
+                            className={`w-full text-white font-bold py-2 rounded transition shadow ${inputMode === 'upload' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
                         >
-                            {inputMode === 'upload' ? 'Carregar Arquivo' : 'Inserir Link'}
+                            {inputMode === 'upload' ? 'Carregar Arquivo' : 'Inserir Transmissão'}
                         </button>
                     </div>
                 </div>
@@ -342,7 +354,7 @@ const AdminTVConfig: React.FC = () => {
                     
                     <div className="p-3 bg-blue-50 border-t border-blue-100 text-xs text-blue-800 flex items-center gap-2">
                         <AlertCircle size={14} />
-                        <span><strong>Nota:</strong> Para arquivos locais (Upload), a reprodução funciona apenas neste computador. Para público geral, use Links MP4 hospedados.</span>
+                        <span><strong>Nota:</strong> Para arquivos locais (Upload), a reprodução funciona apenas nesta sessão. Para público geral, use Links MP4 hospedados.</span>
                     </div>
                 </div>
             </div>

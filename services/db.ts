@@ -1,5 +1,5 @@
 
-import { NewsItem, Program, SiteSettings, SongRequest, ContactMessage, User, UserRole, ListenerSession, TVItem } from '../types';
+import { NewsItem, Program, SiteSettings, SongRequest, ContactMessage, User, UserRole, ListenerSession, TVItem, Sponsor } from '../types';
 
 const STORAGE_KEYS = {
   NEWS: 'radio_13_news',
@@ -9,30 +9,25 @@ const STORAGE_KEYS = {
   SETTINGS: 'radio_13_settings',
   MESSAGES: 'radio_13_messages',
   USERS: 'radio_13_users',
-  SESSIONS: 'radio_13_active_sessions' // New Key for Tracking
+  SESSIONS: 'radio_13_active_sessions',
+  SPONSORS: 'radio_13_sponsors' // Nova chave
 };
 
 // URL da API PHP (Relativa, pois estará na mesma pasta no CPanel)
 // Se estiver em desenvolvimento (localhost), pode precisar ajustar ou usar proxy
 const API_URL = './api.php';
 
-// VÍDEO PADRÃO (Solicitado pelo usuário)
-// ID: r-B0VjT_KNc
-const DEFAULT_TV_PLAYLIST: TVItem[] = [
-    {
-        id: '1',
-        title: 'TV Fluxx - Transmissão Principal',
-        type: 'video',
-        url: 'https://www.youtube.com/watch?v=r-B0VjT_KNc', 
-        duration: 'Ao Vivo'
-    }
-];
+// Playlist Inicial Vazia (Sem vídeo padrão)
+const DEFAULT_TV_PLAYLIST: TVItem[] = [];
 
 const DEFAULT_SETTINGS: SiteSettings = {
   streamUrl: 'http://stm4.xradios.com.br:6982/stream',
   radioName: 'Rádio Treze de Maio',
   logoUrl: '', // Arte Central
   headerLogoUrl: '', // Logo Topo/Rodapé
+  // Default Images (Castelo e Santa)
+  heroLeftImageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Castelo_Belvedere_Treze_de_Maio_SC_01.jpg/600px-Castelo_Belvedere_Treze_de_Maio_SC_01.jpg',
+  heroRightImageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Nossa_Senhora_de_F%C3%A1tima_Treze_de_Maio.jpg/450px-Nossa_Senhora_de_F%C3%A1tima_Treze_de_Maio.jpg',
   phone: '(48) 3625-0000',
   whatsapp: '(48) 99999-0000',
   email: 'contato@radiotrezedemaio.com.br',
@@ -40,8 +35,15 @@ const DEFAULT_SETTINGS: SiteSettings = {
   aboutText: 'A Rádio Treze de Maio é a voz da nossa comunidade. Conectando nossa terra, nossa cultura e nossa fé através das ondas do rádio e do streaming digital. Sintonize 24 horas por dia.',
   aboutImageUrl: 'https://images.unsplash.com/photo-1478737270239-2f02b77ac6d5?q=80&w=1920&auto=format&fit=crop',
   rssUrls: [
+    // Google News Específico
     'https://news.google.com/rss/search?q=Treze+de+Maio+Santa+Catarina&hl=pt-BR&gl=BR&ceid=BR:pt-419',
-    'https://folharegionalwebtv.com/feed'
+    
+    // Portais Regionais (AMUREL / Sul de SC) - Para garantir volume de notícias na Quarentena
+    'https://notisul.com.br/feed/',
+    'https://hcnoticias.com.br/feed/',
+    'https://folharegionalwebtv.com/feed',
+    'https://extra.sc/feed/',
+    'https://www.engeplus.com.br/rss/'
   ],
   apiUrl: '',
   apiKey: '',
@@ -105,6 +107,25 @@ const syncToServer = async (key: string, data: any) => {
     }
 };
 
+// HELPER: Send Email Notification via PHP
+const sendEmailNotification = async (type: 'request' | 'message', data: any) => {
+    try {
+        await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'send_email',
+                type: type,
+                payload: data,
+                to: 'drynos.com@gmail.com' 
+            })
+        });
+        console.log("Email notification triggered.");
+    } catch (e) {
+        console.warn("Failed to trigger email notification", e);
+    }
+};
+
 export const db = {
   init: async () => {
     // 1. Tentar baixar dados do servidor (Real Data)
@@ -131,9 +152,6 @@ export const db = {
     }
 
     // 2. Inicialização Padrão (Fallback / First Run)
-    // Se o LocalStorage ainda estiver vazio (server falhou ou é primeira vez), preenche com defaults
-    
-    // Settings
     if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
     } else {
@@ -141,7 +159,12 @@ export const db = {
         const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS) || '{}');
         let updated = false;
 
-        if (!Array.isArray(current.rssUrls)) { current.rssUrls = DEFAULT_SETTINGS.rssUrls; updated = true; }
+        // Force RSS update if it's the old default list
+        if (!Array.isArray(current.rssUrls) || current.rssUrls.length <= 2) { 
+            current.rssUrls = DEFAULT_SETTINGS.rssUrls; 
+            updated = true; 
+        }
+        
         if (!current.streamUrl) { current.streamUrl = DEFAULT_SETTINGS.streamUrl; updated = true; }
         if (!current.radioName) { current.radioName = DEFAULT_SETTINGS.radioName; updated = true; }
         if (!current.facebookUrl) { current.facebookUrl = DEFAULT_SETTINGS.facebookUrl; updated = true; }
@@ -149,7 +172,18 @@ export const db = {
         if (!current.googleAnalyticsId) { current.googleAnalyticsId = ''; updated = true; }
         if (current.tvEnabled === undefined) { current.tvEnabled = true; updated = true; }
         if (current.headerLogoUrl === undefined) { current.headerLogoUrl = ''; updated = true; }
-        if (!current.tvPlaylist || current.tvPlaylist.length === 0) { current.tvPlaylist = DEFAULT_TV_PLAYLIST; updated = true; }
+        
+        // Remove Default Video if it exists and playlist is length 1 with that ID
+        if (current.tvPlaylist && current.tvPlaylist.length === 1 && current.tvPlaylist[0].id === '1' && current.tvPlaylist[0].title.includes('TV Fluxx')) {
+            current.tvPlaylist = [];
+            updated = true;
+        }
+
+        if (!current.tvPlaylist) { current.tvPlaylist = DEFAULT_TV_PLAYLIST; updated = true; }
+        
+        // Migration for Hero Images
+        if (!current.heroLeftImageUrl) { current.heroLeftImageUrl = DEFAULT_SETTINGS.heroLeftImageUrl; updated = true; }
+        if (!current.heroRightImageUrl) { current.heroRightImageUrl = DEFAULT_SETTINGS.heroRightImageUrl; updated = true; }
 
         if (updated) {
             localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(current));
@@ -181,6 +215,11 @@ export const db = {
     if (!localStorage.getItem(STORAGE_KEYS.SESSIONS)) {
         localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify([]));
     }
+    
+    // Sponsors Init
+    if (!localStorage.getItem(STORAGE_KEYS.SPONSORS)) {
+        localStorage.setItem(STORAGE_KEYS.SPONSORS, JSON.stringify([]));
+    }
   },
 
   getSettings: (): SiteSettings => {
@@ -200,6 +239,12 @@ export const db = {
 
   getNews: (onlyPublished = false): NewsItem[] => {
     const news: NewsItem[] = JSON.parse(localStorage.getItem(STORAGE_KEYS.NEWS) || '[]');
+    // Sort Descending (Newest First) - ROBUST SORT
+    news.sort((a, b) => {
+        const dateA = new Date(a.createdAt).getTime() || 0;
+        const dateB = new Date(b.createdAt).getTime() || 0;
+        return dateB - dateA;
+    });
     return onlyPublished ? news.filter(n => n.published) : news;
   },
 
@@ -209,33 +254,55 @@ export const db = {
   },
 
   saveNewsItem: (item: NewsItem) => {
-    const news = db.getNews();
+    let news = db.getNews(false); // Get current list
     const index = news.findIndex(n => n.id === item.id);
+    
     if (index >= 0) {
       news[index] = item;
     } else {
-      news.unshift(item);
+      news.push(item);
     }
+
+    // CRITICAL: Sort entire array by Date before saving
+    news.sort((a, b) => {
+        const dateA = new Date(a.createdAt).getTime() || 0;
+        const dateB = new Date(b.createdAt).getTime() || 0;
+        return dateB - dateA;
+    });
+
     localStorage.setItem(STORAGE_KEYS.NEWS, JSON.stringify(news));
-    syncToServer(STORAGE_KEYS.NEWS, news); // Sync to Server
+    syncToServer(STORAGE_KEYS.NEWS, news); // Sync to Server sorted list
   },
 
   deleteNewsItem: (id: string) => {
     const news = db.getNews().filter(n => n.id !== id);
     localStorage.setItem(STORAGE_KEYS.NEWS, JSON.stringify(news));
-    syncToServer(STORAGE_KEYS.NEWS, news); // Sync to Server
+    syncToServer(STORAGE_KEYS.NEWS, news);
   },
 
   getRejectedNews: (): NewsItem[] => {
-      return JSON.parse(localStorage.getItem(STORAGE_KEYS.REJECTED_NEWS) || '[]');
+      const news: NewsItem[] = JSON.parse(localStorage.getItem(STORAGE_KEYS.REJECTED_NEWS) || '[]');
+      news.sort((a, b) => {
+        const dateA = new Date(a.createdAt).getTime() || 0;
+        const dateB = new Date(b.createdAt).getTime() || 0;
+        return dateB - dateA;
+      });
+      return news;
   },
 
   saveRejectedNews: (item: NewsItem) => {
-      const rejected = db.getRejectedNews();
+      let rejected = db.getRejectedNews();
       if (rejected.some(r => r.title === item.title)) return;
-      rejected.unshift(item);
+      rejected.push(item);
+      
+      // Sort Rejected too
+      rejected.sort((a, b) => {
+        const dateA = new Date(a.createdAt).getTime() || 0;
+        const dateB = new Date(b.createdAt).getTime() || 0;
+        return dateB - dateA;
+      });
+
       localStorage.setItem(STORAGE_KEYS.REJECTED_NEWS, JSON.stringify(rejected));
-      // Rejeitadas geralmente não precisam ir pro servidor público, mas vamos sincronizar para o admin ver de outro PC
       syncToServer(STORAGE_KEYS.REJECTED_NEWS, rejected); 
   },
 
@@ -281,6 +348,8 @@ export const db = {
     requests.unshift(req);
     localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(requests));
     syncToServer(STORAGE_KEYS.REQUESTS, requests);
+    // Send email notification
+    sendEmailNotification('request', req);
   },
 
   updateRequestStatus: (id: string, status: 'pending' | 'played') => {
@@ -302,6 +371,31 @@ export const db = {
     messages.unshift(msg);
     localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
     syncToServer(STORAGE_KEYS.MESSAGES, messages);
+    // Send email notification
+    sendEmailNotification('message', msg);
+  },
+
+  // --- SPONSORS METHODS ---
+  getSponsors: (): Sponsor[] => {
+      return JSON.parse(localStorage.getItem(STORAGE_KEYS.SPONSORS) || '[]');
+  },
+  
+  saveSponsor: (sponsor: Sponsor) => {
+      const sponsors = db.getSponsors();
+      const index = sponsors.findIndex(s => s.id === sponsor.id);
+      if (index >= 0) {
+          sponsors[index] = sponsor;
+      } else {
+          sponsors.push(sponsor);
+      }
+      localStorage.setItem(STORAGE_KEYS.SPONSORS, JSON.stringify(sponsors));
+      syncToServer(STORAGE_KEYS.SPONSORS, sponsors);
+  },
+  
+  deleteSponsor: (id: string) => {
+      const sponsors = db.getSponsors().filter(s => s.id !== id);
+      localStorage.setItem(STORAGE_KEYS.SPONSORS, JSON.stringify(sponsors));
+      syncToServer(STORAGE_KEYS.SPONSORS, sponsors);
   },
 
   // --- NEW SESSION TRACKING METHODS ---
@@ -311,7 +405,6 @@ export const db = {
 
   addSession: (session: ListenerSession) => {
       const sessions = db.getSessions();
-      // Remove existing if duplicate IP to prevent spam in demo
       const filtered = sessions.filter(s => s.ip !== session.ip);
       filtered.push(session);
       localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(filtered));
@@ -337,7 +430,6 @@ export const db = {
               }
           }
       });
-      // Add timestamp metadata
       backup['backup_metadata'] = {
           date: new Date().toISOString(),
           version: '1.0'
@@ -357,7 +449,6 @@ export const db = {
           Object.keys(backup).forEach(key => {
               if (Object.values(STORAGE_KEYS).includes(key)) {
                   localStorage.setItem(key, JSON.stringify(backup[key]));
-                  // IMPORTANT: Push restored data to server
                   syncToServer(key, backup[key]);
                   count++;
               }

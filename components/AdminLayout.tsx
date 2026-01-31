@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../services/auth';
-import { LayoutDashboard, Radio, Calendar, Music, Settings, LogOut, FileText, Mail, Menu, X, ChevronRight, BarChart3, Tv, Activity, Globe } from 'lucide-react';
+import { LayoutDashboard, Radio, Calendar, Music, Settings, LogOut, FileText, Mail, Menu, X, ChevronRight, BarChart3, Tv, Activity, Globe, HeartHandshake } from 'lucide-react';
 import { User } from '../types';
 
 const AdminLayout: React.FC = () => {
@@ -28,7 +28,7 @@ const AdminLayout: React.FC = () => {
   const navItems = [
     // Novas categorias solicitadas
     { path: '/admin/painel', label: 'Painel', icon: <LayoutDashboard size={20} /> },
-    { path: '/admin/dashboard', label: 'Central de Comando', icon: <Radio size={20} /> }, // O antigo Dashboard vira a Central
+    { path: '/admin/dashboard', label: 'Central de Comando', icon: <Radio size={20} /> }, 
     { path: '/admin/trafego', label: 'Tráfego do Site', icon: <BarChart3 size={20} /> },
     { path: '/admin/tv-config', label: 'Configuração TV Ao Vivo', icon: <Tv size={20} /> },
     
@@ -36,6 +36,7 @@ const AdminLayout: React.FC = () => {
     { path: '/admin/noticias', label: 'Notícias & Conteúdo', icon: <FileText size={20} /> },
     { path: '/admin/programacao', label: 'Grade de Programação', icon: <Calendar size={20} /> },
     { path: '/admin/pedidos', label: 'Pedidos Musicais', icon: <Music size={20} /> },
+    { path: '/admin/patrocinadores', label: 'Patrocinadores', icon: <HeartHandshake size={20} /> }, // Novo Link
     { path: '/admin/mensagens', label: 'Caixa de Entrada', icon: <Mail size={20} /> },
     { path: '/admin/configuracoes', label: 'Configurações Gerais', icon: <Settings size={20} /> },
   ];
