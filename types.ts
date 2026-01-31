@@ -49,10 +49,19 @@ export interface SongRequest {
   createdAt: string;
 }
 
+export interface TVItem {
+  id: string;
+  title: string;
+  type: 'live' | 'video' | 'commercial';
+  url: string; // YouTube ID or MP4
+  duration: string; // Display string like "05:00" or "Ao Vivo"
+}
+
 export interface SiteSettings {
   streamUrl: string;
   radioName: string;
-  logoUrl?: string; // New field for custom logo
+  logoUrl?: string; // Arte Central (Hero)
+  headerLogoUrl?: string; // Logo do Topo e Rodapé (Horizontal)
   phone: string;
   whatsapp: string;
   email: string;
@@ -66,6 +75,11 @@ export interface SiteSettings {
   // Social Media
   facebookUrl?: string;
   instagramUrl?: string;
+  // Analytics
+  googleAnalyticsId?: string; // New: GA4 ID
+  // TV Settings
+  tvEnabled?: boolean;
+  tvPlaylist?: TVItem[];
 }
 
 export interface ContactMessage {

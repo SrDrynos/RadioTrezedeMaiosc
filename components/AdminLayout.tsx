@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../services/auth';
-import { LayoutDashboard, Radio, Calendar, Music, Settings, LogOut, FileText, Mail, Menu, X, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Radio, Calendar, Music, Settings, LogOut, FileText, Mail, Menu, X, ChevronRight, BarChart3, Tv, Activity, Globe } from 'lucide-react';
 import { User } from '../types';
 
 const AdminLayout: React.FC = () => {
@@ -26,12 +26,18 @@ const AdminLayout: React.FC = () => {
   if (!user) return null;
 
   const navItems = [
-    { path: '/admin/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
+    // Novas categorias solicitadas
+    { path: '/admin/painel', label: 'Painel', icon: <LayoutDashboard size={20} /> },
+    { path: '/admin/dashboard', label: 'Central de Comando', icon: <Radio size={20} /> }, // O antigo Dashboard vira a Central
+    { path: '/admin/trafego', label: 'Tráfego do Site', icon: <BarChart3 size={20} /> },
+    { path: '/admin/tv-config', label: 'Configuração TV Ao Vivo', icon: <Tv size={20} /> },
+    
+    // Categorias existentes
     { path: '/admin/noticias', label: 'Notícias & Conteúdo', icon: <FileText size={20} /> },
     { path: '/admin/programacao', label: 'Grade de Programação', icon: <Calendar size={20} /> },
     { path: '/admin/pedidos', label: 'Pedidos Musicais', icon: <Music size={20} /> },
     { path: '/admin/mensagens', label: 'Caixa de Entrada', icon: <Mail size={20} /> },
-    { path: '/admin/configuracoes', label: 'Configurações', icon: <Settings size={20} /> },
+    { path: '/admin/configuracoes', label: 'Configurações Gerais', icon: <Settings size={20} /> },
   ];
 
   return (
@@ -81,6 +87,14 @@ const AdminLayout: React.FC = () => {
         </nav>
 
         <div className="p-4 border-t border-slate-800 bg-slate-950/50">
+          {/* Botão Voltar para o Site */}
+          <Link 
+            to="/" 
+            className="w-full flex items-center justify-center px-4 py-2.5 mb-4 bg-slate-800 hover:bg-slate-700 text-blue-200 border border-slate-700 hover:border-blue-500/50 rounded-xl text-sm font-bold transition-all duration-300 group shadow-lg"
+          >
+            <Globe size={16} className="mr-2 group-hover:scale-110 transition-transform" /> Voltar para o Site
+          </Link>
+
           <div className="flex items-center mb-4 px-2">
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center font-bold text-white shadow-lg">
                 {user.name.charAt(0)}

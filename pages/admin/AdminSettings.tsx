@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../../services/db';
 import { SiteSettings } from '../../types';
-import { Save, Upload, Image as ImageIcon, Trash2, AlertCircle, Rss, Plus, Database, Server, Key, Info, Share2 } from 'lucide-react';
+import { Save, Upload, Image as ImageIcon, Trash2, AlertCircle, Rss, Plus, Database, Server, Key, Info, Share2, PanelTop } from 'lucide-react';
 import { RadioLogo } from '../../components/RadioLogo';
 
 const AdminSettings: React.FC = () => {
@@ -105,7 +105,7 @@ const AdminSettings: React.FC = () => {
     });
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'logoUrl' | 'aboutImageUrl') => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'logoUrl' | 'aboutImageUrl' | 'headerLogoUrl') => {
     const file = e.target.files?.[0];
     setError(null);
     if (file && settings) {
@@ -117,9 +117,9 @@ const AdminSettings: React.FC = () => {
       setIsProcessing(true);
       try {
         // Determine format based on field
-        // logoUrl -> PNG (Preserve Transparency)
+        // logoUrl / headerLogoUrl -> PNG (Preserve Transparency)
         // aboutImageUrl -> JPEG (Better Compression)
-        const format = field === 'logoUrl' ? 'image/png' : 'image/jpeg';
+        const format = field === 'aboutImageUrl' ? 'image/jpeg' : 'image/png';
         
         const compressedBase64 = await compressImage(file, format);
         
@@ -140,7 +140,7 @@ const AdminSettings: React.FC = () => {
     }
   };
 
-  const handleRemoveImage = (field: 'logoUrl' | 'aboutImageUrl') => {
+  const handleRemoveImage = (field: 'logoUrl' | 'aboutImageUrl' | 'headerLogoUrl') => {
       if (settings) {
           if (window.confirm('Deseja remover esta imagem?')) {
               setSettings({ ...settings, [field]: '' });
@@ -149,8 +149,6 @@ const AdminSettings: React.FC = () => {
   };
 
   if (!settings) return null;
-
-  const isBase64Logo = settings.logoUrl?.startsWith('data:');
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -175,22 +173,21 @@ const AdminSettings: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="bg-white p-8 rounded-xl shadow space-y-12">
             
-            {/* 1. Logo Settings */}
+            {/* 1. NEW: Header/Footer Logo */}
             <section>
                 <h3 className="text-lg font-bold text-blue-900 border-b pb-2 mb-4 flex items-center gap-2">
-                    <ImageIcon size={20} /> 1. Logo (Topo e Rodapé)
+                    <PanelTop size={20} /> 1. Logo Horizontal (Topo e Rodapé)
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                     <div>
-                         <label className="block text-sm font-medium text-gray-700 mb-2">Pré-visualização</label>
-                         <div className="bg-gray-100 p-6 rounded-lg flex items-center justify-center border border-gray-300 min-h-[200px] overflow-hidden relative">
+                         <label className="block text-sm font-medium text-gray-700 mb-2">Pré-visualização (Fundo Claro)</label>
+                         <div className="bg-white p-6 rounded-lg flex items-center justify-center border border-gray-300 min-h-[120px] overflow-hidden relative shadow-sm">
                             {isProcessing ? (
                                 <div className="text-center">
                                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                                    <span className="text-blue-600 font-bold text-sm">Otimizando...</span>
                                 </div>
                             ) : (
-                                <RadioLogo src={settings.logoUrl} className="w-full max-w-[280px] h-auto object-contain" />
+                                <RadioLogo src={settings.headerLogoUrl} className="w-full max-w-[200px] h-auto object-contain" />
                             )}
                          </div>
                     </div>
@@ -201,6 +198,59 @@ const AdminSettings: React.FC = () => {
                                 <label className={`cursor-pointer bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold flex items-center transition shadow-sm ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
                                     <Upload size={18} className="mr-2" /> 
                                     {isProcessing ? 'Processando...' : 'Carregar Logo'}
+                                    <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        onChange={(e) => handleImageUpload(e, 'headerLogoUrl')} 
+                                        className="hidden" 
+                                        disabled={isProcessing}
+                                    />
+                                </label>
+                                {settings.headerLogoUrl && !isProcessing && (
+                                    <button 
+                                        type="button" 
+                                        onClick={() => handleRemoveImage('headerLogoUrl')}
+                                        className="text-red-500 hover:text-red-700 p-2 border border-red-100 hover:border-red-200 bg-white rounded transition"
+                                        title="Remover logo"
+                                    >
+                                        <Trash2 size={20} />
+                                    </button>
+                                )}
+                            </div>
+                            <p className="text-xs text-blue-700 mt-2">
+                                <strong>Recomendado:</strong> 350x100px (PNG Transparente).
+                                <br/>Usada na barra superior (celular/PC) e no rodapé.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* 2. Main Hero Logo */}
+            <section>
+                <h3 className="text-lg font-bold text-blue-900 border-b pb-2 mb-4 flex items-center gap-2">
+                    <ImageIcon size={20} /> 2. Arte Central (Home/Hero)
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                    <div>
+                         <label className="block text-sm font-medium text-gray-700 mb-2">Pré-visualização</label>
+                         <div className="bg-gray-800 p-6 rounded-lg flex items-center justify-center border border-gray-600 min-h-[200px] overflow-hidden relative">
+                            {isProcessing ? (
+                                <div className="text-center">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                                </div>
+                            ) : (
+                                <RadioLogo src={settings.logoUrl} className="w-full max-w-[280px] h-auto object-contain" />
+                            )}
+                         </div>
+                    </div>
+                    <div className="space-y-6">
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <label className="block text-sm font-bold text-gray-900 mb-2">Enviar Arquivo</label>
+                            <div className="flex items-center gap-2">
+                                <label className={`cursor-pointer bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 font-bold flex items-center transition shadow-sm ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    <Upload size={18} className="mr-2" /> 
+                                    {isProcessing ? 'Processando...' : 'Carregar Arte'}
                                     <input 
                                         type="file" 
                                         accept="image/*" 
@@ -220,22 +270,9 @@ const AdminSettings: React.FC = () => {
                                     </button>
                                 )}
                             </div>
-                            <p className="text-xs text-blue-700 mt-2">
-                                Ideal: Fundo transparente (PNG).
+                            <p className="text-xs text-gray-600 mt-2">
+                                Imagem grande exibida no centro da página inicial.
                             </p>
-                        </div>
-                        
-                        {/* URL Fallback */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Ou Link Externo (URL)</label>
-                            <input 
-                                type="text" 
-                                value={isBase64Logo ? '' : settings.logoUrl || ''} 
-                                onChange={e => setSettings({...settings, logoUrl: e.target.value})}
-                                placeholder={isBase64Logo ? "(Imagem carregada via upload)" : "https://..."}
-                                disabled={isBase64Logo}
-                                className={`w-full border border-gray-300 p-2 rounded text-sm ${isBase64Logo ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                            />
                         </div>
                     </div>
                 </div>

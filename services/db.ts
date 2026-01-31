@@ -1,5 +1,5 @@
 
-import { NewsItem, Program, SiteSettings, SongRequest, ContactMessage, User, UserRole, ListenerSession } from '../types';
+import { NewsItem, Program, SiteSettings, SongRequest, ContactMessage, User, UserRole, ListenerSession, TVItem } from '../types';
 
 const STORAGE_KEYS = {
   NEWS: 'radio_13_news',
@@ -12,10 +12,23 @@ const STORAGE_KEYS = {
   SESSIONS: 'radio_13_active_sessions' // New Key for Tracking
 };
 
+// VÍDEO PADRÃO (Solicitado pelo usuário)
+// ID: r-B0VjT_KNc
+const DEFAULT_TV_PLAYLIST: TVItem[] = [
+    {
+        id: '1',
+        title: 'TV Fluxx - Transmissão Principal',
+        type: 'video',
+        url: 'https://www.youtube.com/watch?v=r-B0VjT_KNc', 
+        duration: 'Ao Vivo'
+    }
+];
+
 const DEFAULT_SETTINGS: SiteSettings = {
   streamUrl: 'http://stm4.xradios.com.br:6982/stream',
   radioName: 'Rádio Treze de Maio',
-  logoUrl: '', // Clean default
+  logoUrl: '', // Arte Central
+  headerLogoUrl: '', // Logo Topo/Rodapé
   phone: '(48) 3625-0000',
   whatsapp: '(48) 99999-0000',
   email: 'contato@radiotrezedemaio.com.br',
@@ -29,7 +42,10 @@ const DEFAULT_SETTINGS: SiteSettings = {
   apiUrl: '',
   apiKey: '',
   facebookUrl: 'https://www.facebook.com/radiotrezedemaiosc/',
-  instagramUrl: 'https://www.instagram.com/radio13demaio.sc/'
+  instagramUrl: 'https://www.instagram.com/radio13demaio.sc/',
+  googleAnalyticsId: '',
+  tvEnabled: true, // Enable by default for better UX on first load
+  tvPlaylist: DEFAULT_TV_PLAYLIST
 };
 
 const DEFAULT_PROGRAMS: Program[] = [
@@ -108,6 +124,21 @@ export const db = {
         // Ensure social media defaults
         if (!current.facebookUrl) { current.facebookUrl = DEFAULT_SETTINGS.facebookUrl; updated = true; }
         if (!current.instagramUrl) { current.instagramUrl = DEFAULT_SETTINGS.instagramUrl; updated = true; }
+        
+        // Ensure GA defaults
+        if (!current.googleAnalyticsId) { current.googleAnalyticsId = ''; updated = true; }
+        
+        // Ensure TV defaults
+        if (current.tvEnabled === undefined) { current.tvEnabled = true; updated = true; }
+        
+        // Ensure New Logo Field
+        if (current.headerLogoUrl === undefined) { current.headerLogoUrl = ''; updated = true; }
+
+        // FIX: Ensure playlist has valid items if empty
+        if (!current.tvPlaylist || current.tvPlaylist.length === 0) { 
+            current.tvPlaylist = DEFAULT_TV_PLAYLIST; 
+            updated = true; 
+        }
 
         if (updated) {
             localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(current));
@@ -150,10 +181,11 @@ export const db = {
     // Safety check for quota
     try {
         localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+        // FORCE UPDATE: Dispatch event so components like PublicLayout refresh immediately
+        window.dispatchEvent(new Event('radio-settings-update'));
     } catch (e) {
         // If quota exceeded, try to clear the logo to save at least text data
         console.error("Quota exceeded, clearing logo to save settings", e);
-        // We throw to let the UI know, but we try a fallback save without image if crucial
         throw e;
     }
   },

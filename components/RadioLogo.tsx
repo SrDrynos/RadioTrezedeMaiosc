@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface RadioLogoProps {
   className?: string;
@@ -8,6 +8,11 @@ interface RadioLogoProps {
 
 export const RadioLogo: React.FC<RadioLogoProps> = ({ className = "w-40", src }) => {
   const [imgError, setImgError] = useState(false);
+
+  // Reset error state when src changes (e.g., when updating settings)
+  useEffect(() => {
+    setImgError(false);
+  }, [src]);
 
   // If we have a valid source and no error, show the Official Logo
   if (src && src.trim() !== "" && !imgError) {

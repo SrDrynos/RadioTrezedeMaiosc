@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+
+import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../../services/db';
 import { NewsItem, SiteSettings } from '../../types';
@@ -10,8 +11,21 @@ const Home: React.FC = () => {
   const [settings, setSettings] = useState<SiteSettings | null>(null);
 
   useEffect(() => {
-    setNews(db.getNews(true).slice(0, 3)); // Get top 3 published news
-    setSettings(db.getSettings());
+    const loadData = () => {
+        setNews(db.getNews(true).slice(0, 3)); // Get top 3 published news
+        const s = db.getSettings();
+        setSettings(s);
+    };
+
+    loadData();
+
+    window.addEventListener('radio-settings-update', loadData);
+    window.addEventListener('storage', loadData);
+
+    return () => {
+        window.removeEventListener('radio-settings-update', loadData);
+        window.removeEventListener('storage', loadData);
+    };
   }, []);
 
   if (!settings) return <div className="p-10 text-center">Carregando...</div>;
@@ -19,74 +33,54 @@ const Home: React.FC = () => {
   return (
     <div className="animate-fade-in bg-gray-50">
       {/* 
-        HERO SECTION - Custom Design based on Image Reference
-        Contains: Green Landscape, Castle (Left), Saint (Right), Logo (Center)
+        HERO SECTION - STATIC ONLY (Logo + Image)
       */}
-      <section className="relative h-[500px] md:h-[600px] overflow-hidden bg-blue-900">
+      <section className="relative h-auto min-h-[500px] md:h-[600px] overflow-hidden bg-blue-900 pb-10">
         
-        {/* 1. Background Layer: Green Fields + Blue Sky */}
+        {/* Background Layer */}
         <div className="absolute inset-0 z-0">
-            {/* Using a high quality landscape that resembles Treze de Maio fields */}
             <img 
                 src="https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?q=80&w=1920&auto=format&fit=crop" 
                 alt="Paisagem Treze de Maio" 
                 className="w-full h-full object-cover opacity-80"
             />
-            {/* Gradient Overlay to ensure text readability and match blue tint */}
             <div className="absolute inset-0 bg-gradient-to-b from-blue-900/40 via-blue-800/20 to-green-900/30"></div>
-            {/* Top blue fade for navbar integration */}
             <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-blue-900/90 to-transparent"></div>
         </div>
 
-        {/* 2. Composition Layer */}
-        <div className="container mx-auto px-4 h-full relative z-10 flex flex-col justify-center items-center">
+        {/* Content Layer */}
+        <div className="container mx-auto px-4 h-full relative z-10 flex flex-col justify-center items-center pt-20">
             
-            {/* Central Content Wrapper */}
-            <div className="relative w-full max-w-6xl flex justify-between items-end h-full pb-10 md:pb-16">
-                
-                {/* Left Element: Castelo Belvedere (Real Image Representation) */}
+            <div className="relative w-full max-w-6xl flex justify-between items-end h-full pb-10 md:pb-16 mt-10">
                 <div className="hidden md:block w-1/4 relative self-end mb-4 opacity-95 hover:scale-105 transition duration-700">
-                     <img 
+                    <img 
                         src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Castelo_Belvedere_Treze_de_Maio_SC_01.jpg/600px-Castelo_Belvedere_Treze_de_Maio_SC_01.jpg" 
                         alt="Castelo Belvedere" 
                         className="w-full h-auto object-contain drop-shadow-2xl rounded-lg transform -rotate-3 border-4 border-white/30 shadow-xl"
                         style={{ filter: 'contrast(1.1) brightness(1.1)' }}
-                     />
+                    />
                 </div>
 
-                {/* Center Element: Typography & Logo */}
                 <div className="flex-1 flex flex-col items-center justify-center text-center px-4 md:-mt-20">
-                    
-                    {/* Top Tagline */}
                     <div className="bg-blue-600/80 backdrop-blur-sm text-white px-4 py-1 rounded-full mb-6 transform -rotate-1 border border-blue-400 shadow-lg">
                         <span className="font-bold text-sm md:text-base tracking-widest uppercase">Ouça Online 24 Horas</span>
                     </div>
-
-                    {/* MAIN LOGO COMPOSITION - INCREASED SIZE HERE */}
                     <div className="relative mb-6 transform hover:scale-105 transition duration-500">
-                        {/* Increased width to w-80 (mobile) and w-[450px] (desktop) */}
                         <RadioLogo src={settings.logoUrl} className="w-80 md:w-[450px] h-auto drop-shadow-2xl" />
                     </div>
-
-                    {/* Slogan */}
-                    <div className="space-y-1 mt-2">
-                        <h3 className="text-lg md:text-xl font-bold text-blue-100 uppercase tracking-widest drop-shadow-md">
-                            Música • Notícias • Comunidade
-                        </h3>
-                    </div>
-
-                    {/* CTA Buttons */}
+                    <h3 className="text-lg md:text-xl font-bold text-blue-100 uppercase tracking-widest drop-shadow-md">
+                        Música • Notícias • Comunidade
+                    </h3>
                     <div className="flex flex-col sm:flex-row gap-4 mt-8">
-                        <a href="#player" className="px-8 py-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-blue-900 font-black uppercase rounded-full shadow-lg hover:scale-105 transition transform flex items-center justify-center gap-2">
+                        <button onClick={() => (document.querySelector('button[title="Play"]') as HTMLElement)?.click()} className="px-8 py-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-blue-900 font-black uppercase rounded-full shadow-lg hover:scale-105 transition transform flex items-center justify-center gap-2">
                             <span className="animate-pulse text-xl">▶</span> Ouvir Agora
-                        </a>
+                        </button>
                         <Link to="/pedidos" className="px-8 py-3 bg-white/10 backdrop-blur-md border-2 border-white text-white font-bold uppercase rounded-full hover:bg-white hover:text-blue-900 transition flex items-center justify-center">
                             Pedir Música
                         </Link>
                     </div>
                 </div>
 
-                {/* Right Element: Nossa Senhora de Fátima (Real Image Representation) */}
                 <div className="hidden md:block w-1/4 relative self-end mb-4 hover:scale-105 transition duration-700">
                     <img 
                         src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Nossa_Senhora_de_F%C3%A1tima_Treze_de_Maio.jpg/450px-Nossa_Senhora_de_F%C3%A1tima_Treze_de_Maio.jpg" 
@@ -106,7 +100,7 @@ const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* Latest News */}
+      {/* Latest News Section (Existing) */}
       <section className="py-16">
         <div className="container mx-auto px-4">
             <div className="flex justify-between items-end mb-10 border-b-2 border-gray-200 pb-4">
@@ -142,7 +136,7 @@ const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* Interactive Banners - Styled to match identity */}
+      {/* Interactive Banners */}
       <section className="py-12 bg-white mb-10">
          <div className="container mx-auto px-4 grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="relative overflow-hidden rounded-2xl p-8 text-white shadow-xl group">

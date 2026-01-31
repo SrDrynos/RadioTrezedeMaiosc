@@ -2,9 +2,11 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../../services/db';
 import { SiteSettings } from '../../types';
+import { Mic, Radio, Signal, Music2 } from 'lucide-react';
 
 const About: React.FC = () => {
   const [settings, setSettings] = useState<SiteSettings | null>(null);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     setSettings(db.getSettings());
@@ -12,14 +14,64 @@ const About: React.FC = () => {
 
   if (!settings) return null;
 
+  // COMPONENTE DE ARTE VISUAL (CSS ART)
+  // Substitui a imagem quando ela não existe ou falha
+  const StudioArtPlaceholder = () => (
+    <div className="w-full h-96 bg-gradient-to-br from-blue-900 via-blue-800 to-slate-900 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden shadow-2xl border-4 border-white/10 group">
+        
+        {/* Background Patterns */}
+        <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
+
+        {/* Animated Sound Waves */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-[300px] h-[300px] border border-white/10 rounded-full animate-ping opacity-20 absolute"></div>
+            <div className="w-[400px] h-[400px] border border-white/5 rounded-full animate-ping animation-delay-1000 opacity-10 absolute"></div>
+        </div>
+
+        {/* Central Icon Composition */}
+        <div className="relative z-10 flex flex-col items-center">
+            <div className="w-24 h-24 bg-gradient-to-tr from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg mb-6 transform group-hover:scale-110 transition duration-500">
+                <Mic className="text-blue-900 w-12 h-12" />
+            </div>
+            
+            <h2 className="text-3xl md:text-5xl font-black text-white tracking-tighter uppercase drop-shadow-lg text-center px-4">
+                {settings.radioName}
+            </h2>
+            
+            <div className="flex items-center gap-3 mt-4 text-blue-200 font-medium tracking-widest uppercase text-sm">
+                <span className="flex items-center gap-1"><Radio size={16} /> Estúdio Digital</span>
+                <span className="w-1 h-1 bg-yellow-400 rounded-full"></span>
+                <span className="flex items-center gap-1"><Signal size={16} /> Ao Vivo</span>
+                <span className="w-1 h-1 bg-yellow-400 rounded-full"></span>
+                <span className="flex items-center gap-1"><Music2 size={16} /> 24 Horas</span>
+            </div>
+        </div>
+
+        {/* Bottom Decorative Line */}
+        <div className="absolute bottom-0 w-full h-2 bg-gradient-to-r from-blue-900 via-yellow-400 to-blue-900"></div>
+    </div>
+  );
+
   return (
     <div className="bg-white py-16 animate-fade-in">
         <div className="container mx-auto px-4">
             <div className="max-w-4xl mx-auto">
                 <h1 className="text-4xl font-bold text-blue-900 mb-8 text-center">Quem Somos</h1>
                 
-                <div className="mb-10 rounded-2xl overflow-hidden shadow-xl">
-                    <img src={settings.aboutImageUrl} alt="Estúdio da Rádio" className="w-full h-96 object-cover transform hover:scale-105 transition duration-700" />
+                <div className="mb-10 rounded-2xl overflow-hidden shadow-xl bg-gray-100">
+                    {/* Lógica: Se tiver imagem E não deu erro, mostra a foto. Senão, mostra a Arte. */}
+                    {settings.aboutImageUrl && !imageError ? (
+                        <img 
+                            src={settings.aboutImageUrl} 
+                            alt="Estúdio da Rádio" 
+                            className="w-full h-96 object-cover transform hover:scale-105 transition duration-700" 
+                            onError={() => setImageError(true)}
+                        />
+                    ) : (
+                        <StudioArtPlaceholder />
+                    )}
                 </div>
 
                 <div className="prose prose-lg max-w-none text-gray-700 space-y-6 leading-relaxed text-justify font-sans">

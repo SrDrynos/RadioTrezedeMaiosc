@@ -1,10 +1,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Menu, X, Facebook, Instagram, Youtube, Phone, Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import { Menu, X, Facebook, Instagram, Youtube, Phone, Play, Pause, Volume2, VolumeX, Tv } from 'lucide-react';
 import { db } from '../services/db';
 import { SiteSettings } from '../types';
 import { RadioLogo } from './RadioLogo';
+
+declare global {
+  interface Window {
+    dataLayer: any[];
+    gtag: (...args: any[]) => void;
+  }
+}
 
 const PublicLayout: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -17,16 +24,47 @@ const PublicLayout: React.FC = () => {
   useEffect(() => {
     // Initialize DB and load settings
     db.init();
-    const loadedSettings = db.getSettings();
-    setSettings(loadedSettings);
+    
+    const loadSettings = () => {
+        const s = db.getSettings();
+        setSettings(s);
+        
+        // --- GOOGLE ANALYTICS INJECTION ---
+        if (s.googleAnalyticsId && !document.getElementById('ga-script')) {
+            const script = document.createElement('script');
+            script.id = 'ga-script';
+            script.async = true;
+            script.src = `https://www.googletagmanager.com/gtag/js?id=${s.googleAnalyticsId}`;
+            document.head.appendChild(script);
+
+            const scriptConfig = document.createElement('script');
+            scriptConfig.innerHTML = `
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${s.googleAnalyticsId}');
+            `;
+            document.head.appendChild(scriptConfig);
+        }
+    };
+
+    loadSettings();
+
+    // Listen for updates from Admin Panel (Same Tab)
+    window.addEventListener('radio-settings-update', loadSettings);
+    // Listen for updates from other tabs
+    window.addEventListener('storage', loadSettings);
 
     // Setup Audio
-    const newAudio = new Audio(loadedSettings.streamUrl);
+    const initialSettings = db.getSettings();
+    const newAudio = new Audio(initialSettings.streamUrl);
     newAudio.preload = 'none';
     setAudio(newAudio);
 
-    // Cleanup on unmount
+    // Cleanup
     return () => {
+      window.removeEventListener('radio-settings-update', loadSettings);
+      window.removeEventListener('storage', loadSettings);
       if (newAudio) {
         newAudio.pause();
         newAudio.src = '';
@@ -46,19 +84,16 @@ const PublicLayout: React.FC = () => {
 
   // NEW: Server-Side Tracking via PHP
   const trackListener = async () => {
-      // Check session storage to avoid spamming the tracker on every play/pause in same session
-      if (sessionStorage.getItem('radio_tracked_session')) return;
-
       try {
           const deviceType = /Mobi|Android/i.test(navigator.userAgent) ? 'Celular' : 'Computador';
-          // Calls the PHP script in the public folder
-          const response = await fetch(`./tracker.php?device=${deviceType}`);
+          
+          // Adiciona timestamp para evitar cache do navegador
+          const response = await fetch(`./tracker.php?device=${deviceType}&t=${Date.now()}`);
           
           if (response.ok) {
               const result = await response.json();
               if (result.success) {
                   console.log("Ouvinte rastreado via servidor:", result.data.city);
-                  sessionStorage.setItem('radio_tracked_session', 'true');
               }
           }
       } catch (e) {
@@ -75,7 +110,7 @@ const PublicLayout: React.FC = () => {
         console.error("Playback failed:", error);
         alert("Não foi possível iniciar o player. Verifique sua conexão.");
       });
-      // Trigger Tracking
+      // Trigger Tracking immediately
       trackListener();
     }
     setIsPlaying(!isPlaying);
@@ -119,14 +154,19 @@ const PublicLayout: React.FC = () => {
       {/* Main Header */}
       <header className="bg-white shadow-md sticky top-0 z-50">
         <div className="container mx-auto px-4 py-2 flex justify-between items-center relative z-50 bg-white">
-          {/* Logo Area */}
+          {/* Logo Area (Usa headerLogoUrl, fallback para logoUrl se vazio) */}
           <Link to="/" className="flex items-center gap-3 group hover:scale-105 transition duration-300">
-             <RadioLogo src={settings.logoUrl} className="h-20 md:h-24 w-auto drop-shadow-md py-1" />
+             {/* Increased height classes: h-20 md:h-24 */}
+             <RadioLogo src={settings.headerLogoUrl || settings.logoUrl} className="h-20 md:h-24 w-auto drop-shadow-md py-1" />
           </Link>
 
           {/* Desktop Nav */}
           <nav className="hidden md:flex space-x-6 font-bold text-sm uppercase tracking-wide text-gray-700 items-center">
             <Link to="/" className={`hover:text-blue-600 transition ${location.pathname === '/' ? 'text-blue-600' : ''}`}>Início</Link>
+            
+            {/* TV Link always visible, independent of status */}
+            <Link to="/tv" className={`flex items-center gap-1 hover:text-red-600 transition ${location.pathname === '/tv' ? 'text-red-600' : ''}`}><Tv size={16} /> TV Online</Link>
+
             <Link to="/noticias" className={`hover:text-blue-600 transition ${location.pathname === '/noticias' ? 'text-blue-600' : ''}`}>Notícias</Link>
             <Link to="/programacao" className={`hover:text-blue-600 transition ${location.pathname === '/programacao' ? 'text-blue-600' : ''}`}>Programação</Link>
             <Link to="/pedidos" className={`hover:text-blue-600 transition ${location.pathname === '/pedidos' ? 'text-blue-600' : ''}`}>Pedidos</Link>
@@ -144,6 +184,9 @@ const PublicLayout: React.FC = () => {
         {isMenuOpen && (
           <nav className="md:hidden bg-white border-t p-4 flex flex-col space-y-3 shadow-lg relative z-50 animate-fade-in">
             <Link to="/" className="block py-2 text-gray-700 font-bold uppercase border-b border-gray-100">Início</Link>
+            
+            <Link to="/tv" className="block py-2 text-red-600 font-bold uppercase border-b border-gray-100 flex items-center gap-2"><Tv size={18} /> TV Online</Link>
+
             <Link to="/noticias" className="block py-2 text-gray-700 font-bold uppercase border-b border-gray-100">Notícias</Link>
             <Link to="/programacao" className="block py-2 text-gray-700 font-bold uppercase border-b border-gray-100">Programação</Link>
             <Link to="/pedidos" className="block py-2 text-gray-700 font-bold uppercase border-b border-gray-100">Pedidos Musicais</Link>
@@ -172,7 +215,8 @@ const PublicLayout: React.FC = () => {
         <div className="container mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-8">
             <div>
                 <div className="mb-6">
-                     <RadioLogo src={settings.logoUrl} className="h-28 w-auto" />
+                     {/* Footer Logo also uses the Horizontal version */}
+                     <RadioLogo src={settings.headerLogoUrl || settings.logoUrl} className="h-28 w-auto" />
                 </div>
                 <p className="text-gray-300 text-sm mb-4 leading-relaxed">A Voz de Treze de Maio para o mundo. Levando nossa cultura, nossa fé e o melhor da música para onde você estiver.</p>
                 <div className="flex space-x-3">
@@ -183,7 +227,7 @@ const PublicLayout: React.FC = () => {
             <div>
                 <h3 className="text-lg font-bold mb-4 text-green-400 uppercase tracking-wide">Links Rápidos</h3>
                 <ul className="space-y-2 text-gray-300 text-sm font-medium">
-                    <li><Link to="/a-radio" className="hover:text-yellow-400 transition">Quem Somos</Link></li>
+                    <li><Link to="/tv" className="hover:text-yellow-400 transition text-red-400">TV Online</Link></li>
                     <li><Link to="/noticias" className="hover:text-yellow-400 transition">Notícias Locais</Link></li>
                     <li><Link to="/programacao" className="hover:text-yellow-400 transition">Nossa Grade</Link></li>
                     <li><Link to="/pedidos" className="hover:text-yellow-400 transition">Peça sua Música</Link></li>

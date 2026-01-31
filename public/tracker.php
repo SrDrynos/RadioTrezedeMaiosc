@@ -76,18 +76,14 @@ if ($geoData && isset($geoData['status']) && $geoData['status'] == 'success') {
         }
     }
 
-    // Filtra IPs duplicados recentes (últimos 10 minutos) para não spamar o log
-    // Opcional: Remova este bloco se quiser registrar CADA play
-    $currentData = array_filter($currentData, function($item) use ($ip) {
-        // Mantém se for IP diferente OU se for mais antigo que 20 min
-        $itemTime = strtotime($item['connectedAt']);
-        return ($item['ip'] !== $ip) || (time() - $itemTime > 1200);
-    });
-
+    // ALTERADO: Não filtramos mais IPs duplicados agressivamente. 
+    // Isso permite que você teste com 2 abas ou 2 dispositivos na mesma rede WiFi.
+    // Apenas limitamos o tamanho total da lista para não ficar gigante.
+    
     // Adiciona novo no topo
     array_unshift($currentData, $newSession);
 
-    // Mantém apenas os últimos 50 ouvintes
+    // Mantém apenas os últimos 50 ouvintes (remove os mais antigos)
     $currentData = array_slice($currentData, 0, 50);
 
     // 5. Salvar
