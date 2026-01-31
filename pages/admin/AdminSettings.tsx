@@ -1,8 +1,8 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { db } from '../../services/db';
 import { SiteSettings } from '../../types';
-import { Save, Upload, Image as ImageIcon, Trash2, AlertCircle, Rss, Plus, Database, Server, Key, Info, Share2, PanelTop } from 'lucide-react';
+import { Save, Upload, Image as ImageIcon, Trash2, AlertCircle, Rss, Plus, Database, Server, Key, Info, Share2, PanelTop, Download, RefreshCcw, CheckCircle } from 'lucide-react';
 import { RadioLogo } from '../../components/RadioLogo';
 
 const AdminSettings: React.FC = () => {
@@ -11,6 +11,10 @@ const AdminSettings: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   
+  // Backup State
+  const [restoreStatus, setRestoreStatus] = useState<{success: boolean, message: string} | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // State for new RSS input
   const [newRssUrl, setNewRssUrl] = useState('');
 
@@ -53,6 +57,43 @@ const AdminSettings: React.FC = () => {
       const updatedRss = [...(settings.rssUrls || [])];
       updatedRss.splice(index, 1);
       setSettings({ ...settings, rssUrls: updatedRss });
+  };
+
+  // --- BACKUP FUNCTIONS ---
+  const handleDownloadBackup = () => {
+      const jsonString = db.exportBackup();
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backup_radio_13_${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+  };
+
+  const handleRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+          const content = event.target?.result as string;
+          const result = db.importBackup(content);
+          setRestoreStatus(result);
+          
+          if (result.success) {
+              // Reload settings after restore
+              setSettings(db.getSettings());
+              setTimeout(() => window.location.reload(), 2000); // Reload page to apply everything
+          }
+      };
+      reader.readAsText(file);
+      
+      // Reset input
+      if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   // Modified to accept format parameter
@@ -151,7 +192,7 @@ const AdminSettings: React.FC = () => {
   if (!settings) return null;
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto pb-12">
         <h1 className="text-2xl font-bold text-gray-800 mb-6">Configurações do Site</h1>
         
         {error && (
@@ -171,7 +212,7 @@ const AdminSettings: React.FC = () => {
             </div>
         )}
 
-        <form onSubmit={handleSubmit} className="bg-white p-8 rounded-xl shadow space-y-12">
+        <form onSubmit={handleSubmit} className="bg-white p-8 rounded-xl shadow space-y-12 mb-8">
             
             {/* 1. NEW: Header/Footer Logo */}
             <section>
@@ -487,6 +528,66 @@ const AdminSettings: React.FC = () => {
                 {isProcessing ? 'Processando...' : 'Salvar Configurações'}
             </button>
         </form>
+
+        {/* BACKUP & SECURITY SECTION */}
+        <section className="bg-slate-800 text-white p-8 rounded-xl shadow-lg border border-slate-700">
+             <div className="flex items-center gap-3 mb-6 border-b border-slate-600 pb-4">
+                 <div className="bg-yellow-500 p-2 rounded text-slate-900">
+                     <Database size={24} />
+                 </div>
+                 <div>
+                     <h3 className="text-xl font-bold">Backup e Segurança de Dados</h3>
+                     <p className="text-slate-400 text-sm">Previna a perda de dados exportando o banco de dados local.</p>
+                 </div>
+             </div>
+             
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                 <div className="bg-slate-700/50 p-6 rounded-lg border border-slate-600">
+                     <h4 className="font-bold flex items-center gap-2 mb-2 text-green-400">
+                         <Download size={18} /> Exportar Dados
+                     </h4>
+                     <p className="text-sm text-slate-300 mb-4">
+                         Gera um arquivo <code>.json</code> contendo todas as notícias, playlists da TV, configurações e pedidos musicais. Salve este arquivo no seu computador regularmente.
+                     </p>
+                     <button 
+                        onClick={handleDownloadBackup}
+                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-bold transition w-full shadow-md"
+                     >
+                         Baixar Backup Completo
+                     </button>
+                 </div>
+
+                 <div className="bg-slate-700/50 p-6 rounded-lg border border-slate-600">
+                     <h4 className="font-bold flex items-center gap-2 mb-2 text-blue-400">
+                         <RefreshCcw size={18} /> Restaurar Dados
+                     </h4>
+                     <p className="text-sm text-slate-300 mb-4">
+                         Tem um arquivo de backup? Carregue-o aqui para restaurar todo o site ao estado anterior.
+                         <br/><span className="text-yellow-400 text-xs uppercase font-bold">Cuidado: Isso substituirá os dados atuais.</span>
+                     </p>
+                     
+                     <div className="flex flex-col gap-3">
+                        <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold transition w-full shadow-md text-center block">
+                             Selecionar Arquivo de Backup
+                             <input 
+                                type="file" 
+                                ref={fileInputRef}
+                                accept=".json"
+                                onChange={handleRestoreBackup}
+                                className="hidden"
+                             />
+                        </label>
+                        
+                        {restoreStatus && (
+                            <div className={`p-3 rounded text-sm font-bold flex items-center gap-2 ${restoreStatus.success ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-red-500/20 text-red-400 border border-red-500/50'}`}>
+                                {restoreStatus.success ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+                                {restoreStatus.message}
+                            </div>
+                        )}
+                     </div>
+                 </div>
+             </div>
+        </section>
     </div>
   );
 };

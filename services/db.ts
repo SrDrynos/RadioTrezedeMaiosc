@@ -12,6 +12,10 @@ const STORAGE_KEYS = {
   SESSIONS: 'radio_13_active_sessions' // New Key for Tracking
 };
 
+// URL da API PHP (Relativa, pois estará na mesma pasta no CPanel)
+// Se estiver em desenvolvimento (localhost), pode precisar ajustar ou usar proxy
+const API_URL = './api.php';
+
 // VÍDEO PADRÃO (Solicitado pelo usuário)
 // ID: r-B0VjT_KNc
 const DEFAULT_TV_PLAYLIST: TVItem[] = [
@@ -87,23 +91,49 @@ const DEFAULT_NEWS: NewsItem[] = [
   }
 ];
 
-export const db = {
-  init: () => {
-    // 1. Force Clean of Old Junk Data
+// Helper to Push Data to Server (Background Sync)
+const syncToServer = async (key: string, data: any) => {
     try {
-        const rawSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-        if (rawSettings) {
-            const settings = JSON.parse(rawSettings);
-            if (settings.logoUrl && (settings.logoUrl.includes('PHN2Zy') || settings.logoUrl.includes('<svg'))) {
-                settings.logoUrl = ''; // NUKE IT
-                localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+        await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [key]: data })
+        });
+        console.log(`Synced ${key} to server.`);
+    } catch (e) {
+        console.warn(`Failed to sync ${key} to server.`, e);
+    }
+};
+
+export const db = {
+  init: async () => {
+    // 1. Tentar baixar dados do servidor (Real Data)
+    try {
+        const response = await fetch(API_URL);
+        if (response.ok) {
+            const serverData = await response.json();
+            
+            // Se tiver dados no servidor, atualiza o LocalStorage
+            if (serverData && serverData.status !== 'empty') {
+                Object.keys(serverData).forEach(key => {
+                    // Só atualiza chaves conhecidas
+                    if (Object.values(STORAGE_KEYS).includes(key)) {
+                        localStorage.setItem(key, JSON.stringify(serverData[key]));
+                    }
+                });
+                // Dispara atualização para a UI perceber a mudança
+                window.dispatchEvent(new Event('radio-settings-update'));
+                window.dispatchEvent(new Event('storage'));
             }
         }
     } catch (e) {
-        console.error("Cleanup error", e);
+        console.log("Modo Offline ou Erro de Rede na Inicialização:", e);
     }
 
-    // 2. Standard Init
+    // 2. Inicialização Padrão (Fallback / First Run)
+    // Se o LocalStorage ainda estiver vazio (server falhou ou é primeira vez), preenche com defaults
+    
+    // Settings
     if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
     } else {
@@ -111,34 +141,15 @@ export const db = {
         const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS) || '{}');
         let updated = false;
 
-        // Ensure array exists
-        if (!Array.isArray(current.rssUrls)) {
-            current.rssUrls = DEFAULT_SETTINGS.rssUrls;
-            updated = true;
-        }
-        
-        // Ensure defaults
+        if (!Array.isArray(current.rssUrls)) { current.rssUrls = DEFAULT_SETTINGS.rssUrls; updated = true; }
         if (!current.streamUrl) { current.streamUrl = DEFAULT_SETTINGS.streamUrl; updated = true; }
         if (!current.radioName) { current.radioName = DEFAULT_SETTINGS.radioName; updated = true; }
-        
-        // Ensure social media defaults
         if (!current.facebookUrl) { current.facebookUrl = DEFAULT_SETTINGS.facebookUrl; updated = true; }
         if (!current.instagramUrl) { current.instagramUrl = DEFAULT_SETTINGS.instagramUrl; updated = true; }
-        
-        // Ensure GA defaults
         if (!current.googleAnalyticsId) { current.googleAnalyticsId = ''; updated = true; }
-        
-        // Ensure TV defaults
         if (current.tvEnabled === undefined) { current.tvEnabled = true; updated = true; }
-        
-        // Ensure New Logo Field
         if (current.headerLogoUrl === undefined) { current.headerLogoUrl = ''; updated = true; }
-
-        // FIX: Ensure playlist has valid items if empty
-        if (!current.tvPlaylist || current.tvPlaylist.length === 0) { 
-            current.tvPlaylist = DEFAULT_TV_PLAYLIST; 
-            updated = true; 
-        }
+        if (!current.tvPlaylist || current.tvPlaylist.length === 0) { current.tvPlaylist = DEFAULT_TV_PLAYLIST; updated = true; }
 
         if (updated) {
             localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(current));
@@ -151,7 +162,7 @@ export const db = {
     
     // News Init
     const storedNews = JSON.parse(localStorage.getItem(STORAGE_KEYS.NEWS) || '[]');
-    if (storedNews.length === 0 || storedNews.length <= 2) {
+    if (storedNews.length === 0) {
       localStorage.setItem(STORAGE_KEYS.NEWS, JSON.stringify(DEFAULT_NEWS));
     }
 
@@ -160,14 +171,13 @@ export const db = {
       localStorage.setItem(STORAGE_KEYS.REJECTED_NEWS, JSON.stringify([]));
     }
 
-    // Auth Init
+    // Auth Init (Não sincronizamos usuários por segurança neste modelo simples)
     if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
       const admin: User = { id: '1', name: 'Administrador', email: 'drynos.com@gmail.com', role: UserRole.ADMIN };
       localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify([admin]));
     }
     
-    // Sessions Init (Clear old on refresh to prevent ghosts in this demo)
-    // In production with real backend, this wouldn't be cleared here.
+    // Sessions Init
     if (!localStorage.getItem(STORAGE_KEYS.SESSIONS)) {
         localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify([]));
     }
@@ -178,14 +188,12 @@ export const db = {
   },
 
   saveSettings: (settings: SiteSettings) => {
-    // Safety check for quota
     try {
         localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-        // FORCE UPDATE: Dispatch event so components like PublicLayout refresh immediately
+        syncToServer(STORAGE_KEYS.SETTINGS, settings); // Sync to Server
         window.dispatchEvent(new Event('radio-settings-update'));
     } catch (e) {
-        // If quota exceeded, try to clear the logo to save at least text data
-        console.error("Quota exceeded, clearing logo to save settings", e);
+        console.error("Quota exceeded", e);
         throw e;
     }
   },
@@ -209,11 +217,13 @@ export const db = {
       news.unshift(item);
     }
     localStorage.setItem(STORAGE_KEYS.NEWS, JSON.stringify(news));
+    syncToServer(STORAGE_KEYS.NEWS, news); // Sync to Server
   },
 
   deleteNewsItem: (id: string) => {
     const news = db.getNews().filter(n => n.id !== id);
     localStorage.setItem(STORAGE_KEYS.NEWS, JSON.stringify(news));
+    syncToServer(STORAGE_KEYS.NEWS, news); // Sync to Server
   },
 
   getRejectedNews: (): NewsItem[] => {
@@ -225,15 +235,19 @@ export const db = {
       if (rejected.some(r => r.title === item.title)) return;
       rejected.unshift(item);
       localStorage.setItem(STORAGE_KEYS.REJECTED_NEWS, JSON.stringify(rejected));
+      // Rejeitadas geralmente não precisam ir pro servidor público, mas vamos sincronizar para o admin ver de outro PC
+      syncToServer(STORAGE_KEYS.REJECTED_NEWS, rejected); 
   },
 
   deleteRejectedNews: (id: string) => {
       const rejected = db.getRejectedNews().filter(n => n.id !== id);
       localStorage.setItem(STORAGE_KEYS.REJECTED_NEWS, JSON.stringify(rejected));
+      syncToServer(STORAGE_KEYS.REJECTED_NEWS, rejected);
   },
   
   clearRejectedNews: () => {
       localStorage.setItem(STORAGE_KEYS.REJECTED_NEWS, JSON.stringify([]));
+      syncToServer(STORAGE_KEYS.REJECTED_NEWS, []);
   },
 
   getPrograms: (): Program[] => {
@@ -249,11 +263,13 @@ export const db = {
       programs.push(program);
     }
     localStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs));
+    syncToServer(STORAGE_KEYS.PROGRAMS, programs);
   },
 
   deleteProgram: (id: string) => {
     const programs = db.getPrograms().filter(p => p.id !== id);
     localStorage.setItem(STORAGE_KEYS.PROGRAMS, JSON.stringify(programs));
+    syncToServer(STORAGE_KEYS.PROGRAMS, programs);
   },
 
   getRequests: (): SongRequest[] => {
@@ -264,6 +280,7 @@ export const db = {
     const requests = db.getRequests();
     requests.unshift(req);
     localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(requests));
+    syncToServer(STORAGE_KEYS.REQUESTS, requests);
   },
 
   updateRequestStatus: (id: string, status: 'pending' | 'played') => {
@@ -272,6 +289,7 @@ export const db = {
     if (req) {
       req.status = status;
       localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(requests));
+      syncToServer(STORAGE_KEYS.REQUESTS, requests);
     }
   },
 
@@ -283,6 +301,7 @@ export const db = {
     const messages = db.getMessages();
     messages.unshift(msg);
     localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
+    syncToServer(STORAGE_KEYS.MESSAGES, messages);
   },
 
   // --- NEW SESSION TRACKING METHODS ---
@@ -302,5 +321,54 @@ export const db = {
       const sessions = db.getSessions();
       const filtered = sessions.filter(s => s.id !== id);
       localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(filtered));
+  },
+
+  // --- BACKUP & RESTORE SYSTEMS (DATABASE SECURITY) ---
+  
+  exportBackup: (): string => {
+      const backup: Record<string, any> = {};
+      Object.values(STORAGE_KEYS).forEach(key => {
+          const data = localStorage.getItem(key);
+          if (data) {
+              try {
+                  backup[key] = JSON.parse(data);
+              } catch (e) {
+                  backup[key] = data;
+              }
+          }
+      });
+      // Add timestamp metadata
+      backup['backup_metadata'] = {
+          date: new Date().toISOString(),
+          version: '1.0'
+      };
+      return JSON.stringify(backup, null, 2);
+  },
+
+  importBackup: (jsonString: string): { success: boolean, message: string } => {
+      try {
+          const backup = JSON.parse(jsonString);
+          let count = 0;
+
+          if (!backup || typeof backup !== 'object') {
+              return { success: false, message: 'Arquivo de backup inválido.' };
+          }
+
+          Object.keys(backup).forEach(key => {
+              if (Object.values(STORAGE_KEYS).includes(key)) {
+                  localStorage.setItem(key, JSON.stringify(backup[key]));
+                  // IMPORTANT: Push restored data to server
+                  syncToServer(key, backup[key]);
+                  count++;
+              }
+          });
+          
+          window.dispatchEvent(new Event('radio-settings-update'));
+          
+          return { success: true, message: `${count} bancos de dados restaurados e sincronizados.` };
+      } catch (e) {
+          console.error("Import failed", e);
+          return { success: false, message: 'Erro ao processar o arquivo. Verifique se é um JSON válido.' };
+      }
   }
 };
