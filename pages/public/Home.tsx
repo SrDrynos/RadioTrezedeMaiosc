@@ -39,19 +39,23 @@ const Home: React.FC = () => {
   return (
     <div className="animate-fade-in bg-gray-50">
       {/* 
-        HERO SECTION - STATIC ONLY (Logo + Image)
+        HERO SECTION - PAISAGEM TOTALMENTE VISÍVEL
+        Removido bg-blue-900 de fundo para evitar "azulão" se a imagem demorar.
+        Fundo agora é cinza escuro neutro.
       */}
-      <section className="relative h-auto min-h-[500px] md:h-[600px] overflow-hidden bg-blue-900 pb-10">
+      <section className="relative h-auto min-h-[500px] md:h-[600px] overflow-hidden bg-slate-900 pb-10">
         
-        {/* Background Layer */}
+        {/* Background Layer: Imagem com Opacidade 100% (Sem transparência) */}
         <div className="absolute inset-0 z-0">
-            <img 
-                src="https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?q=80&w=1920&auto=format&fit=crop" 
-                alt="Paisagem Treze de Maio" 
-                className="w-full h-full object-cover opacity-80"
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-blue-900/40 via-blue-800/20 to-green-900/30"></div>
-            <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-blue-900/90 to-transparent"></div>
+            {settings.backgroundImageUrl ? (
+                <img 
+                    src={settings.backgroundImageUrl} 
+                    alt="Paisagem de Fundo" 
+                    className="w-full h-full object-cover opacity-100 transition-opacity duration-1000"
+                />
+            ) : null}
+            {/* Gradiente MUITO mais suave. Azul apenas nas bordas para leitura, centro limpo. */}
+            <div className="absolute inset-0 bg-gradient-to-b from-blue-900/60 via-transparent to-blue-900/90"></div>
         </div>
 
         {/* Content Layer */}
@@ -59,46 +63,48 @@ const Home: React.FC = () => {
             
             <div className="relative w-full max-w-6xl flex justify-between items-end h-full pb-10 md:pb-16 mt-10">
                 
-                {/* Imagem Esquerda (Castelo) */}
+                {/* Imagem Esquerda (Opcional) */}
                 {settings.heroLeftImageUrl && (
                     <div className="hidden md:block w-1/4 relative self-end mb-4 opacity-95 hover:scale-105 transition duration-700">
                         <img 
                             src={settings.heroLeftImageUrl} 
-                            alt="Castelo Belvedere" 
+                            alt="Decorativo Esquerda" 
                             className="w-full h-auto object-contain drop-shadow-2xl transform -rotate-3"
-                            style={{ filter: 'contrast(1.1) brightness(1.1)' }}
                         />
                     </div>
                 )}
 
                 <div className="flex-1 flex flex-col items-center justify-center text-center px-4 md:-mt-20">
-                    <div className="bg-blue-600/80 backdrop-blur-sm text-white px-4 py-1 rounded-full mb-6 transform -rotate-1 border border-blue-400 shadow-lg">
-                        <span className="font-bold text-sm md:text-base tracking-widest uppercase">Ouça Online 24 Horas</span>
+                    <div className="bg-blue-600/90 backdrop-blur-md text-white px-6 py-1.5 rounded-full mb-6 transform -rotate-1 border border-blue-400/50 shadow-xl">
+                        <span className="font-bold text-sm md:text-base tracking-[0.2em] uppercase text-shadow-sm">Ouça Online 24 Horas</span>
                     </div>
+                    
+                    {/* LOGO CENTRAL */}
                     <div className="relative mb-6 transform hover:scale-105 transition duration-500">
-                        <RadioLogo src={settings.logoUrl} className="w-80 md:w-[450px] h-auto drop-shadow-2xl" />
+                        <RadioLogo src={settings.logoUrl} className="w-80 md:w-[450px] h-auto drop-shadow-2xl filter contrast-125" />
                     </div>
-                    <h3 className="text-lg md:text-xl font-bold text-blue-100 uppercase tracking-widest drop-shadow-md">
+                    
+                    <h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-widest drop-shadow-md text-shadow-lg">
                         Música • Notícias • Comunidade
                     </h3>
                     <div className="flex flex-col sm:flex-row gap-4 mt-8">
-                        <button onClick={() => (document.querySelector('button[title="Play"]') as HTMLElement)?.click()} className="px-8 py-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-blue-900 font-black uppercase rounded-full shadow-lg hover:scale-105 transition transform flex items-center justify-center gap-2">
+                        {/* ID Target updated to 'global-play-btn' to ensure it works */}
+                        <button onClick={() => (document.getElementById('global-play-btn') as HTMLElement)?.click()} className="px-8 py-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-blue-900 font-black uppercase rounded-full shadow-[0_0_20px_rgba(250,204,21,0.6)] hover:scale-105 transition transform flex items-center justify-center gap-2 border-2 border-yellow-300">
                             <span className="animate-pulse text-xl">▶</span> Ouvir Agora
                         </button>
-                        <Link to="/pedidos" className="px-8 py-3 bg-white/10 backdrop-blur-md border-2 border-white text-white font-bold uppercase rounded-full hover:bg-white hover:text-blue-900 transition flex items-center justify-center">
+                        <Link to="/pedidos" className="px-8 py-3 bg-black/40 backdrop-blur-md border-2 border-white/80 text-white font-bold uppercase rounded-full hover:bg-white hover:text-blue-900 transition flex items-center justify-center shadow-lg">
                             Pedir Música
                         </Link>
                     </div>
                 </div>
 
-                {/* Imagem Direita (Santa) */}
+                {/* Imagem Direita (Opcional) */}
                 {settings.heroRightImageUrl && (
                     <div className="hidden md:block w-1/4 relative self-end mb-4 hover:scale-105 transition duration-700">
                         <img 
                             src={settings.heroRightImageUrl} 
-                            alt="Nossa Senhora de Fátima" 
+                            alt="Decorativo Direita" 
                             className="w-full h-auto object-contain drop-shadow-2xl transform rotate-3"
-                            style={{ filter: 'contrast(1.1) brightness(1.1)' }}
                         />
                     </div>
                 )}

@@ -50,7 +50,7 @@ export const SponsorsCarousel: React.FC = () => {
                         href={sponsor.externalUrl || '#'} 
                         target={sponsor.externalUrl ? "_blank" : "_self"}
                         rel="noreferrer"
-                        className={`block w-40 h-24 flex-shrink-0 grayscale hover:grayscale-0 transition duration-300 transform hover:scale-110 flex items-center justify-center ${!sponsor.externalUrl ? 'cursor-default pointer-events-none' : ''}`}
+                        className={`block w-40 h-24 flex-shrink-0 transition duration-300 transform hover:scale-110 flex items-center justify-center ${!sponsor.externalUrl ? 'cursor-default pointer-events-none' : ''}`}
                         title={sponsor.name}
                     >
                         <img 

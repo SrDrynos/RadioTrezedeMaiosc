@@ -158,7 +158,7 @@ export const newsAutomationService = {
          }
 
        } catch(e) {
-         console.error("RSS Error:", url, e);
+         // Error handled silently
        }
     }
     
@@ -279,7 +279,6 @@ async function fetchRawRSS(url: string): Promise<string | null> {
             const res2 = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
             return await res2.text();
         } catch (e2) {
-            console.error("Proxy Error", url);
             return null;
         }
     }

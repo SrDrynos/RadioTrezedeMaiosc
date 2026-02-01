@@ -66,6 +66,11 @@ const TV: React.FC = () => {
           if (event.data === 0) {
               handleNextVideo();
           }
+          // YT.PlayerState.PAUSED === 2
+          // FORÇA O PLAY SE PAUSAR (Evita tela de "Mais Vídeos")
+          if (event.data === 2) {
+              event.target.playVideo();
+          }
       };
 
       const initPlayer = () => {
@@ -90,12 +95,15 @@ const TV: React.FC = () => {
                   videoId: videoId,
                   playerVars: {
                       'autoplay': 1,
-                      'controls': 0, // Esconde controles para parecer TV
-                      'rel': 0,
-                      'fs': 0,
-                      'modestbranding': 1,
+                      'controls': 0, // Esconde controles
+                      'disablekb': 1, // Desativa teclado (pausa com espaço)
+                      'fs': 0, // Sem botão fullscreen
+                      'rel': 0, // Tenta reduzir relacionados
+                      'modestbranding': 1, // Remove logo YT da barra
+                      'iv_load_policy': 3, // Remove anotações
                       'mute': isMuted ? 1 : 0,
-                      'iv_load_policy': 3 // Esconde anotações
+                      'playsinline': 1,
+                      'origin': window.location.origin
                   },
                   events: {
                       'onReady': (event: any) => {
@@ -174,9 +182,13 @@ const TV: React.FC = () => {
                      */}
                      <div className="bg-black aspect-video rounded-xl overflow-hidden shadow-2xl border border-slate-700 relative group">
                          
+                         {/* Camada de Bloqueio Invisível: Impede qualquer clique ou hover no player */}
+                         <div className="absolute inset-0 z-10 w-full h-full bg-transparent"></div>
+
                          {isYoutube ? (
                              // PLAYER YOUTUBE (API CONTAINER)
-                             <div className="w-full h-full transform scale-[1.35] origin-center pointer-events-none">
+                             // Scale 1.60 corta agressivamente o título no topo e a barra de controle no fundo
+                             <div className="w-full h-full transform scale-[1.60] origin-center pointer-events-none select-none">
                                 <div id="fluxx-yt-player" className="w-full h-full"></div>
                              </div>
                          ) : currentItem?.url ? (
@@ -190,10 +202,7 @@ const TV: React.FC = () => {
                                 controls={false} 
                                 playsInline
                                 onEnded={handleNextVideo}
-                                onError={(e) => {
-                                    console.log("Erro no video, pulando...", e);
-                                    handleNextVideo();
-                                }}
+                                onError={() => handleNextVideo()}
                                 style={{ pointerEvents: 'none' }}
                              >
                                  Seu navegador não suporta este vídeo.
@@ -217,7 +226,7 @@ const TV: React.FC = () => {
                              </div>
                          </div>
 
-                         {/* Mute/Unmute Control - Top Right (Only Interactive Element) */}
+                         {/* Mute/Unmute Control - Top Right (Only Interactive Element via Z-Index) */}
                          <button 
                             onClick={() => setIsMuted(!isMuted)}
                             className="absolute top-4 right-4 z-30 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full backdrop-blur-md transition-all cursor-pointer pointer-events-auto"
@@ -228,7 +237,7 @@ const TV: React.FC = () => {
                         
                         {/* Bloqueio Visual */}
                         {isMuted && (
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
                                 <div className="bg-black/40 backdrop-blur-sm px-6 py-3 rounded-xl border border-white/20 text-white font-bold animate-pulse">
                                     CLIQUE NO ÍCONE DE SOM PARA OUVIR ↗
                                 </div>

@@ -25,7 +25,7 @@ interface LocationData {
   method: 'GPS' | 'IP';
   lat: number;
   lng: number;
-  accuracy?: number;
+  accuracy?: number; // Em metros
   street: string;
   number: string;
   neighborhood: string;
@@ -82,16 +82,23 @@ const AdminDashboard: React.FC = () => {
               
               // Reverse Geocoding (Lat/Lng -> Endereço Real)
               try {
-                  // Using OpenStreetMap Nominatim for detailed address
-                  const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
+                  // Using OpenStreetMap Nominatim for detailed address with Portuguese Language enforced
+                  const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1&accept-language=pt-BR`, {
+                      headers: {
+                          'User-Agent': 'RadioTrezeDeMaioApp/1.0' // Boa prática para API do OSM
+                      }
+                  });
+                  
+                  if (!geoRes.ok) throw new Error("Falha na API de Mapas");
+
                   const geoData = await geoRes.json();
                   const addr = geoData.address || {};
                   
-                  // Ensure all fields are strings to avoid Object Rendering Error
+                  // Ensure all fields are strings to avoid Object Rendering Error and handle variations
                   const street = String(addr.road || addr.pedestrian || addr.street || "Rua não identificada");
                   const houseNumber = String(addr.house_number || "S/N");
                   const suburb = String(addr.suburb || addr.neighbourhood || addr.residential || "");
-                  const city = String(addr.city || addr.town || addr.village || "");
+                  const city = String(addr.city || addr.town || addr.village || addr.municipality || "");
                   const state = String(addr.state_code || addr.state || "");
 
                   const fullAddress = String(geoData.display_name || "");
@@ -107,11 +114,10 @@ const AdminDashboard: React.FC = () => {
                       city: city,
                       region: state,
                       full_address: fullAddress,
-                      isp: 'Conexão Local Segura'
+                      isp: 'Conexão Local Segura (GPS)'
                   });
                   setTrackingStatus('locked');
               } catch (e) {
-                  console.error("Erro na conversão de endereço", e);
                   // Fallback se a API de endereço falhar, mas temos coordenadas
                   setLocation({
                       method: 'GPS',
@@ -121,16 +127,15 @@ const AdminDashboard: React.FC = () => {
                       street: `Lat: ${latitude.toFixed(5)}`,
                       number: "",
                       neighborhood: `Lng: ${longitude.toFixed(5)}`,
-                      city: "Coordenadas Brutas",
+                      city: "Localização por Coordenadas",
                       region: "",
                       full_address: "Endereço não pôde ser resolvido pelo servidor de mapas.",
-                      isp: 'Conexão Local Segura'
+                      isp: 'Conexão Local Segura (GPS)'
                   });
                   setTrackingStatus('locked');
               }
           },
           (error) => {
-              console.warn("Erro GPS:", error);
               if (error.code === 1) {
                   setTrackingStatus('denied');
                   setTrackingErrorMsg('Permissão de GPS negada pelo usuário.');
@@ -144,7 +149,7 @@ const AdminDashboard: React.FC = () => {
               fallbackToIP();
           },
           { 
-              enableHighAccuracy: true, // CRITICAL: Forces GPS hardware usage
+              enableHighAccuracy: true, // CRITICAL: Forces GPS hardware usage for precision
               timeout: 20000, 
               maximumAge: 0 
           }
@@ -161,7 +166,7 @@ const AdminDashboard: React.FC = () => {
                   method: 'IP',
                   lat: ipData.latitude,
                   lng: ipData.longitude,
-                  accuracy: 5000, // IP is imprecise
+                  accuracy: 5000, // IP is imprecise (approx 5km)
                   street: "Localização Aproximada (Baseada em IP)",
                   number: "",
                   neighborhood: "",
@@ -172,7 +177,7 @@ const AdminDashboard: React.FC = () => {
               });
           }
       } catch (e) {
-          console.error("IP Geo failed", e);
+          // IP fallback failed silently
       }
   };
 
@@ -219,11 +224,10 @@ const AdminDashboard: React.FC = () => {
                     sessions = logData;
                 }
             } catch (e) {
-                console.error("Erro ao parsear JSON de logs", e);
+                // JSON parse error silently handled
             }
         } else {
              // Fallback local apenas se o server falhar
-             console.warn("Server logs not found (404), checking local db...");
              sessions = db.getSessions();
         }
 
@@ -268,7 +272,7 @@ const AdminDashboard: React.FC = () => {
         }
 
     } catch (error) {
-        console.error("Dashboard Sync Error", error);
+        // Silent error for stream sync
     }
   };
 
@@ -331,10 +335,11 @@ const AdminDashboard: React.FC = () => {
                     <div className="flex items-center gap-3">
                         <button 
                             onClick={initializeGPS} 
-                            className="p-1.5 bg-white border border-slate-300 rounded hover:bg-slate-100 text-slate-600 transition"
+                            className="p-1.5 bg-white border border-slate-300 rounded hover:bg-slate-100 text-slate-600 transition flex items-center gap-2 text-xs font-bold px-3"
                             title="Voltar para Minha Localização"
                         >
                             <RefreshCw size={14} className={trackingStatus === 'searching' ? 'animate-spin' : ''} />
+                            ATUALIZAR GPS
                         </button>
                     </div>
                 </div>
@@ -351,14 +356,14 @@ const AdminDashboard: React.FC = () => {
                                 marginHeight={0} 
                                 marginWidth={0} 
                                 title="Tracking Map"
-                                // Dynamic Zoom: IP locations (1000m accuracy) get zoom 13, GPS gets 19
+                                // Dynamic Zoom: IP locations (1000m accuracy) get zoom 13, GPS gets 19 (Street Level)
                                 src={`https://maps.google.com/maps?q=${location.lat},${location.lng}&z=${location.accuracy && location.accuracy > 100 ? 13 : 19}&output=embed`}
                                 className="filter grayscale-[20%] group-hover:grayscale-0 transition duration-700"
                             ></iframe>
                             
                             {/* PRECISION OVERLAY */}
                             <div className="absolute top-4 left-4 bg-black/80 text-white p-3 rounded-lg backdrop-blur-md border border-white/10 shadow-xl max-w-xs">
-                                <div className="text-[10px] text-green-400 uppercase font-bold tracking-wider mb-1 flex items-center gap-1">
+                                <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 flex items-center gap-1 ${location.method === 'GPS' ? 'text-green-400' : 'text-yellow-400'}`}>
                                     <Signal size={10} /> Precisão: {location.accuracy ? `+/- ${location.accuracy}m` : 'Baixa (IP)'}
                                 </div>
                                 <div className="font-mono text-xl font-bold tracking-tight text-white mb-1">
@@ -374,16 +379,16 @@ const AdminDashboard: React.FC = () => {
                                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 mb-1">
-                                             <div className="bg-blue-100 text-blue-700 p-1 rounded">
-                                                <MapPin size={16} />
+                                             <div className={`p-1 rounded text-white text-xs font-bold px-2 ${location.method === 'GPS' ? 'bg-green-600' : 'bg-blue-500'}`}>
+                                                {location.method === 'GPS' ? 'SINAL GPS ATIVO' : 'SINAL DE IP (REDE)'}
                                              </div>
                                              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                                                 {location.method === 'GPS' ? 'Meu GPS' : 'Local do Ouvinte (IP)'}
+                                                 {location.method === 'GPS' ? 'Localização Precisa' : 'Localização Aproximada'}
                                              </span>
                                         </div>
                                         
                                         <div>
-                                            <h2 className="text-xl font-black text-slate-800 leading-none">
+                                            <h2 className="text-xl font-black text-slate-800 leading-none mt-2">
                                                 {location.street} {location.number ? `, ${location.number}` : ''}
                                             </h2>
                                             <p className="text-slate-600 font-medium mt-1">
@@ -405,7 +410,7 @@ const AdminDashboard: React.FC = () => {
                                 <div className="absolute inset-0 bg-blue-400 rounded-full animate-ping opacity-20"></div>
                                 <Navigation size={48} className="relative z-10 text-blue-500 animate-pulse" />
                              </div>
-                             <p className="mt-4 font-bold text-slate-500">Inicializando Mapa...</p>
+                             <p className="mt-4 font-bold text-slate-500">Inicializando GPS...</p>
                         </div>
                     )}
                 </div>

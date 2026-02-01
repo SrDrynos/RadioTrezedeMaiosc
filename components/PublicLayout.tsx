@@ -95,7 +95,7 @@ const PublicLayout: React.FC = () => {
     if (audio && currentSettings.streamUrl !== audio.src) {
         const wasPlaying = !audio.paused;
         audio.src = currentSettings.streamUrl;
-        if(wasPlaying) audio.play().catch(e => console.error("Stream error", e));
+        if(wasPlaying) audio.play().catch(() => {});
     }
   }, [location.pathname, audio]); // Check on nav
 
@@ -105,18 +105,9 @@ const PublicLayout: React.FC = () => {
           const deviceType = /Mobi|Android/i.test(navigator.userAgent) ? 'Celular' : 'Computador';
           
           // Adiciona timestamp para evitar cache do navegador e forçar o PHP a rodar
-          const response = await fetch(`./tracker.php?device=${deviceType}&t=${Date.now()}`);
-          
-          if (response.ok) {
-              const result = await response.json();
-              if (result.success) {
-                  // Opcional: Log silencioso para debug, pode remover em produção
-                  // console.log("Ping enviado:", result.data.city);
-              }
-          }
+          await fetch(`./tracker.php?device=${deviceType}&t=${Date.now()}`);
       } catch (e) {
-          // Falha silenciosa para não atrapalhar o usuário
-          // console.warn("Tracking indisponível");
+          // Falha silenciosa
       }
   };
 
@@ -125,8 +116,8 @@ const PublicLayout: React.FC = () => {
     if (isPlaying) {
       audio.pause();
     } else {
-      audio.play().catch(error => {
-        console.error("Playback failed:", error);
+      audio.play().catch(() => {
+        // Playback failed, likely due to browser policy or stream offline
         alert("Não foi possível iniciar o player. Verifique sua conexão.");
       });
       // Trigger Tracking immediately on Click as well (redundancy is good)
@@ -359,6 +350,8 @@ const PublicLayout: React.FC = () => {
         <div className="container mx-auto px-4 h-full flex items-center justify-between">
             <div className="flex items-center gap-4">
                 <button
+                    id="global-play-btn"
+                    title={isPlaying ? "Pausar" : "Ouvir"}
                     onClick={togglePlay}
                     className={`w-12 h-12 md:w-14 md:h-14 bg-yellow-400 rounded-full flex items-center justify-center text-blue-900 shadow-lg hover:bg-white transition-all duration-300 transform ${isPlaying ? 'scale-105 ring-4 ring-yellow-400/50' : 'hover:scale-105'}`}
                 >

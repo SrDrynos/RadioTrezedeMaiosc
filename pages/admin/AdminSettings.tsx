@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { db } from '../../services/db';
 import { SiteSettings } from '../../types';
-import { Save, Upload, Image as ImageIcon, Trash2, AlertCircle, Rss, Plus, Database, Server, Key, Info, Share2, PanelTop, Download, RefreshCcw, CheckCircle } from 'lucide-react';
+import { Save, Upload, Image as ImageIcon, Trash2, AlertCircle, Rss, Plus, Database, Server, Key, Info, Share2, PanelTop, Download, RefreshCcw, CheckCircle, Layout } from 'lucide-react';
 import { RadioLogo } from '../../components/RadioLogo';
 
 const AdminSettings: React.FC = () => {
@@ -36,8 +36,7 @@ const AdminSettings: React.FC = () => {
             setTimeout(() => setSuccess(false), 3000);
             window.scrollTo(0, 0);
         } catch (err) {
-            console.error(err);
-            setError('ERRO AO SALVAR: O navegador recusou salvar os dados. Provavelmente a imagem é muito pesada ou o armazenamento está cheio. Tente usar uma imagem menor.');
+            setError('ERRO AO SALVAR: O navegador recusou salvar os dados. Provavelmente a imagem é muito pesada ou o armazenamento está cheio. Tente uma imagem menor.');
             window.scrollTo(0, 0);
         }
     }
@@ -109,8 +108,8 @@ const AdminSettings: React.FC = () => {
           let width = img.width;
           let height = img.height;
           // Increased size for better quality (800px for photos)
-          const MAX_WIDTH = 800; 
-          const MAX_HEIGHT = 800;
+          const MAX_WIDTH = 1280; 
+          const MAX_HEIGHT = 1280;
 
           if (width > height) {
             if (width > MAX_WIDTH) {
@@ -146,7 +145,7 @@ const AdminSettings: React.FC = () => {
     });
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'logoUrl' | 'aboutImageUrl' | 'headerLogoUrl' | 'heroLeftImageUrl' | 'heroRightImageUrl') => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'logoUrl' | 'aboutImageUrl' | 'headerLogoUrl' | 'heroLeftImageUrl' | 'heroRightImageUrl' | 'backgroundImageUrl') => {
     const file = e.target.files?.[0];
     setError(null);
     if (file && settings) {
@@ -159,13 +158,13 @@ const AdminSettings: React.FC = () => {
       try {
         // Determine format based on field
         // logoUrl / headerLogoUrl / heroImages -> PNG (Preserve Transparency)
-        // aboutImageUrl -> JPEG (Better Compression)
-        const format = field === 'aboutImageUrl' ? 'image/jpeg' : 'image/png';
+        // aboutImageUrl / backgroundImageUrl -> JPEG (Better Compression)
+        const format = (field === 'aboutImageUrl' || field === 'backgroundImageUrl') ? 'image/jpeg' : 'image/png';
         
         const compressedBase64 = await compressImage(file, format);
         
         // Check size (approx 2MB limit to be safe)
-        if (compressedBase64.length > 2500000) {
+        if (compressedBase64.length > 3000000) {
             setError("A imagem ficou muito grande mesmo após processamento. Tente uma imagem mais leve.");
             setIsProcessing(false);
             return;
@@ -173,7 +172,6 @@ const AdminSettings: React.FC = () => {
 
         setSettings({ ...settings, [field]: compressedBase64 });
       } catch (error) {
-        console.error("Erro ao processar imagem", error);
         setError("Erro técnico ao processar a imagem.");
       } finally {
         setIsProcessing(false);
@@ -181,7 +179,7 @@ const AdminSettings: React.FC = () => {
     }
   };
 
-  const handleRemoveImage = (field: 'logoUrl' | 'aboutImageUrl' | 'headerLogoUrl' | 'heroLeftImageUrl' | 'heroRightImageUrl') => {
+  const handleRemoveImage = (field: 'logoUrl' | 'aboutImageUrl' | 'headerLogoUrl' | 'heroLeftImageUrl' | 'heroRightImageUrl' | 'backgroundImageUrl') => {
       if (settings) {
           if (window.confirm('Deseja remover esta imagem?')) {
               setSettings({ ...settings, [field]: '' });
@@ -214,22 +212,75 @@ const AdminSettings: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="bg-white p-8 rounded-xl shadow space-y-12 mb-8">
             
-            {/* 1. NEW: Header/Footer Logo */}
+            {/* 1. Background Image */}
             <section>
                 <h3 className="text-lg font-bold text-blue-900 border-b pb-2 mb-4 flex items-center gap-2">
-                    <PanelTop size={20} /> 1. Logo Horizontal (Topo e Rodapé)
+                    <Layout size={20} /> 1. Imagem de Fundo (Geral)
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                    <div>
+                         <label className="block text-sm font-medium text-gray-700 mb-2">Pré-visualização</label>
+                         <div className="bg-blue-900 p-4 rounded-lg flex items-center justify-center border border-gray-600 min-h-[150px] overflow-hidden relative shadow-sm">
+                            {isProcessing ? (
+                                <div className="text-center text-white">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                                    Processando...
+                                </div>
+                            ) : (
+                                settings.backgroundImageUrl ? (
+                                    <img src={settings.backgroundImageUrl} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="text-white text-xs opacity-50 text-center">
+                                        Nenhuma imagem selecionada.<br/>O site usará o fundo padrão (azul).
+                                    </div>
+                                )
+                            )}
+                         </div>
+                    </div>
+                    <div className="space-y-6">
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <label className="block text-sm font-bold text-gray-900 mb-2">Enviar Imagem</label>
+                            <div className="flex items-center gap-2">
+                                <label className={`cursor-pointer bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold flex items-center transition shadow-sm ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    <Upload size={18} className="mr-2" /> 
+                                    {isProcessing ? 'Processando...' : 'Carregar Fundo'}
+                                    <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        onChange={(e) => handleImageUpload(e, 'backgroundImageUrl')} 
+                                        className="hidden" 
+                                        disabled={isProcessing}
+                                    />
+                                </label>
+                                {settings.backgroundImageUrl && !isProcessing && (
+                                    <button 
+                                        type="button" 
+                                        onClick={() => handleRemoveImage('backgroundImageUrl')}
+                                        className="text-red-500 hover:text-red-700 p-2 border border-red-100 hover:border-red-200 bg-white rounded transition"
+                                        title="Remover fundo"
+                                    >
+                                        <Trash2 size={20} />
+                                    </button>
+                                )}
+                            </div>
+                            <p className="text-xs text-gray-600 mt-2">
+                                Substitui o fundo padrão. Recomendado: 1920x1080px (JPG).
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* 2. Header/Footer Logo */}
+            <section>
+                <h3 className="text-lg font-bold text-blue-900 border-b pb-2 mb-4 flex items-center gap-2">
+                    <PanelTop size={20} /> 2. Logo Horizontal (Topo e Rodapé)
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                     <div>
                          <label className="block text-sm font-medium text-gray-700 mb-2">Pré-visualização (Fundo Claro)</label>
                          <div className="bg-white p-6 rounded-lg flex items-center justify-center border border-gray-300 min-h-[120px] overflow-hidden relative shadow-sm">
-                            {isProcessing ? (
-                                <div className="text-center">
-                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                                </div>
-                            ) : (
-                                <RadioLogo src={settings.headerLogoUrl} className="w-full max-w-[200px] h-auto object-contain" />
-                            )}
+                            <RadioLogo src={settings.headerLogoUrl} className="w-full max-w-[200px] h-auto object-contain" />
                          </div>
                     </div>
                     <div className="space-y-6">
@@ -267,22 +318,16 @@ const AdminSettings: React.FC = () => {
                 </div>
             </section>
 
-            {/* 2. Main Hero Logo */}
+            {/* 3. Main Hero Logo */}
             <section>
                 <h3 className="text-lg font-bold text-blue-900 border-b pb-2 mb-4 flex items-center gap-2">
-                    <ImageIcon size={20} /> 2. Arte Central (Home/Hero)
+                    <ImageIcon size={20} /> 3. Arte Central (Home/Hero)
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                     <div>
                          <label className="block text-sm font-medium text-gray-700 mb-2">Pré-visualização</label>
                          <div className="bg-gray-800 p-6 rounded-lg flex items-center justify-center border border-gray-600 min-h-[200px] overflow-hidden relative">
-                            {isProcessing ? (
-                                <div className="text-center">
-                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
-                                </div>
-                            ) : (
-                                <RadioLogo src={settings.logoUrl} className="w-full max-w-[280px] h-auto object-contain" />
-                            )}
+                            <RadioLogo src={settings.logoUrl} className="w-full max-w-[280px] h-auto object-contain" />
                          </div>
                     </div>
                     <div className="space-y-6">
@@ -319,10 +364,10 @@ const AdminSettings: React.FC = () => {
                 </div>
             </section>
 
-            {/* 3. Hero Decor Images (Santa & Castelo) */}
+            {/* 4. Hero Decor Images (Santa & Castelo) */}
             <section>
                 <h3 className="text-lg font-bold text-blue-900 border-b pb-2 mb-4 flex items-center gap-2">
-                    <ImageIcon size={20} /> 3. Imagens Decorativas (Topo/Hero)
+                    <ImageIcon size={20} /> 4. Imagens Decorativas (Topo/Hero)
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                     

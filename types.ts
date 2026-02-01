@@ -70,6 +70,7 @@ export interface SiteSettings {
   radioName: string;
   logoUrl?: string; // Arte Central (Hero)
   headerLogoUrl?: string; // Logo do Topo e Rodapé (Horizontal)
+  backgroundImageUrl?: string; // Nova: Imagem de Fundo Geral do Site
   heroLeftImageUrl?: string; // Imagem Decorativa Esquerda (Ex: Castelo)
   heroRightImageUrl?: string; // Imagem Decorativa Direita (Ex: Santa)
   phone: string;
