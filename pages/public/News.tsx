@@ -33,11 +33,10 @@ const News: React.FC = () => {
       }
   };
 
-  // Mapeamento de categorias para exibição amigável
+  // Mapeamento de categorias ajustado: Removemos "Cidades Vizinhas" conforme solicitado
   const categories = [
       { id: 'all', label: 'Todas' },
       { id: 'Treze de Maio - SC', label: 'Treze de Maio' },
-      { id: 'Cidades Vizinhas', label: 'Cidades Vizinhas' },
       { id: 'Região', label: 'Região' },
       { id: 'Avisos', label: 'Avisos' }
   ];
@@ -155,7 +154,7 @@ const News: React.FC = () => {
 
         {filteredNews.length === 0 && (
             <div className="text-center py-20 text-gray-500">
-                Nenhuma notícia encontrada. Aguardando atualização automática.
+                Nenhuma notícia encontrada nesta categoria.
             </div>
         )}
       </div>

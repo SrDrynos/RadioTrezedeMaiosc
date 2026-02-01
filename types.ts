@@ -85,6 +85,8 @@ export interface SiteSettings {
   // Social Media
   facebookUrl?: string;
   instagramUrl?: string;
+  xUrl?: string; // New: X (Twitter)
+  telegramUrl?: string; // New: Telegram Community
   // Analytics
   googleAnalyticsId?: string; // New: GA4 ID
   // TV Settings

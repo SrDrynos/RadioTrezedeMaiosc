@@ -49,6 +49,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   apiKey: '',
   facebookUrl: 'https://www.facebook.com/radiotrezedemaiosc/',
   instagramUrl: 'https://www.instagram.com/radio13demaio.sc/',
+  xUrl: 'https://x.com/ProtoStreaming',
+  telegramUrl: 'https://t.me/+Y-9-kyrRiQ8yOWFh',
   googleAnalyticsId: '',
   tvEnabled: true, // Enable by default for better UX on first load
   tvPlaylist: DEFAULT_TV_PLAYLIST
@@ -169,6 +171,8 @@ export const db = {
         if (!current.radioName) { current.radioName = DEFAULT_SETTINGS.radioName; updated = true; }
         if (!current.facebookUrl) { current.facebookUrl = DEFAULT_SETTINGS.facebookUrl; updated = true; }
         if (!current.instagramUrl) { current.instagramUrl = DEFAULT_SETTINGS.instagramUrl; updated = true; }
+        if (!current.xUrl) { current.xUrl = DEFAULT_SETTINGS.xUrl; updated = true; }
+        if (!current.telegramUrl) { current.telegramUrl = DEFAULT_SETTINGS.telegramUrl; updated = true; }
         if (!current.googleAnalyticsId) { current.googleAnalyticsId = ''; updated = true; }
         if (current.tvEnabled === undefined) { current.tvEnabled = true; updated = true; }
         if (current.headerLogoUrl === undefined) { current.headerLogoUrl = ''; updated = true; }

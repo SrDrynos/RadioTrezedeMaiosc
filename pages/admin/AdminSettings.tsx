@@ -556,6 +556,26 @@ const AdminSettings: React.FC = () => {
                                 className="w-full border border-gray-300 p-2 rounded"
                             />
                         </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">X (Twitter) URL</label>
+                            <input 
+                                type="text" 
+                                value={settings.xUrl || ''} 
+                                onChange={e => setSettings({...settings, xUrl: e.target.value})}
+                                placeholder="https://x.com/..."
+                                className="w-full border border-gray-300 p-2 rounded"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Telegram (Comunidade)</label>
+                            <input 
+                                type="text" 
+                                value={settings.telegramUrl || ''} 
+                                onChange={e => setSettings({...settings, telegramUrl: e.target.value})}
+                                placeholder="https://t.me/..."
+                                className="w-full border border-gray-300 p-2 rounded"
+                            />
+                        </div>
                      </div>
                 </div>
 

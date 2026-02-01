@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Menu, X, Facebook, Instagram, Youtube, Phone, Play, Pause, Volume2, VolumeX, Tv, Rocket, Coins, ShoppingBag, FileText, Zap, Flame } from 'lucide-react';
+import { Menu, X, Facebook, Instagram, Youtube, Phone, Play, Pause, Volume2, VolumeX, Tv, Rocket, Coins, ShoppingBag, FileText, Zap, Flame, Send } from 'lucide-react';
 import { db } from '../services/db';
 import { SiteSettings } from '../types';
 import { RadioLogo } from './RadioLogo';
@@ -12,6 +12,13 @@ declare global {
     gtag: (...args: any[]) => void;
   }
 }
+
+// Custom X Icon (Twitter Rebrand)
+const XIcon: React.FC<{size?: number, className?: string}> = ({size = 16, className = ""}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} xmlns="http://www.w3.org/2000/svg">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+  </svg>
+);
 
 const PublicLayout: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -155,10 +162,11 @@ const PublicLayout: React.FC = () => {
             <span className="flex items-center gap-2 text-green-400 font-bold"><Phone size={14} /> {settings.phone}</span>
             <span className="text-yellow-400 font-bold tracking-widest text-xs">A VOZ DE TREZE DE MAIO</span>
           </div>
-          <div className="flex space-x-4">
-            <a href={settings.facebookUrl || "#"} target="_blank" rel="noopener noreferrer" className="hover:text-yellow-400"><Facebook size={16} /></a>
-            <a href={settings.instagramUrl || "#"} target="_blank" rel="noopener noreferrer" className="hover:text-yellow-400"><Instagram size={16} /></a>
-            <a href="#" className="hover:text-yellow-400 opacity-50 cursor-default" title="Em breve"><Youtube size={16} /></a>
+          <div className="flex items-center space-x-4">
+            {settings.facebookUrl && <a href={settings.facebookUrl} target="_blank" rel="noopener noreferrer" className="hover:text-yellow-400"><Facebook size={16} /></a>}
+            {settings.instagramUrl && <a href={settings.instagramUrl} target="_blank" rel="noopener noreferrer" className="hover:text-yellow-400"><Instagram size={16} /></a>}
+            {settings.xUrl && <a href={settings.xUrl} target="_blank" rel="noopener noreferrer" className="hover:text-yellow-400"><XIcon size={14} /></a>}
+            {settings.telegramUrl && <a href={settings.telegramUrl} target="_blank" rel="noopener noreferrer" className="hover:text-yellow-400"><Send size={16} /></a>}
           </div>
         </div>
       </div>
@@ -232,9 +240,11 @@ const PublicLayout: React.FC = () => {
                      <RadioLogo src={settings.headerLogoUrl || settings.logoUrl} className="h-28 w-auto" />
                 </div>
                 <p className="text-gray-300 text-sm mb-4 leading-relaxed">A Voz de Treze de Maio para o mundo. Levando nossa cultura, nossa fé e o melhor da música para onde você estiver.</p>
-                <div className="flex space-x-3">
-                   <a href={settings.facebookUrl || "#"} target="_blank" rel="noopener noreferrer" className="w-8 h-8 bg-blue-700 rounded flex items-center justify-center cursor-pointer hover:bg-yellow-400 hover:text-blue-900 transition"><Facebook size={18} /></a>
-                   <a href={settings.instagramUrl || "#"} target="_blank" rel="noopener noreferrer" className="w-8 h-8 bg-blue-700 rounded flex items-center justify-center cursor-pointer hover:bg-yellow-400 hover:text-blue-900 transition"><Instagram size={18} /></a>
+                <div className="flex flex-wrap gap-3">
+                   {settings.facebookUrl && <a href={settings.facebookUrl} target="_blank" rel="noopener noreferrer" className="w-8 h-8 bg-blue-700 rounded flex items-center justify-center cursor-pointer hover:bg-yellow-400 hover:text-blue-900 transition"><Facebook size={18} /></a>}
+                   {settings.instagramUrl && <a href={settings.instagramUrl} target="_blank" rel="noopener noreferrer" className="w-8 h-8 bg-blue-700 rounded flex items-center justify-center cursor-pointer hover:bg-yellow-400 hover:text-blue-900 transition"><Instagram size={18} /></a>}
+                   {settings.xUrl && <a href={settings.xUrl} target="_blank" rel="noopener noreferrer" className="w-8 h-8 bg-black border border-gray-700 rounded flex items-center justify-center cursor-pointer hover:bg-yellow-400 hover:text-black hover:border-yellow-400 transition"><XIcon size={16} /></a>}
+                   {settings.telegramUrl && <a href={settings.telegramUrl} target="_blank" rel="noopener noreferrer" className="w-8 h-8 bg-blue-500 rounded flex items-center justify-center cursor-pointer hover:bg-yellow-400 hover:text-blue-900 transition"><Send size={16} /></a>}
                 </div>
             </div>
 

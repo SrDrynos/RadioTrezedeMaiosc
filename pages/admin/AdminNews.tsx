@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { db } from '../../services/db';
 import { newsAutomationService } from '../../services/newsAutomation';
 import { NewsItem } from '../../types';
-import { Trash2, Edit, Plus, X, Zap, AlertTriangle, Rss, Save, Upload, Image as ImageIcon, CheckCircle, ArrowLeft, Ban, ExternalLink, Calendar, FileEdit, Eye } from 'lucide-react';
+import { Trash2, Edit, Plus, X, Zap, AlertTriangle, Rss, Save, Upload, Image as ImageIcon, CheckCircle, ArrowLeft, Ban, ExternalLink, Calendar, FileEdit, Eye, Link as LinkIcon, Filter, Search } from 'lucide-react';
 
 const AdminNews: React.FC = () => {
   const [activeNews, setActiveNews] = useState<NewsItem[]>([]);
@@ -24,6 +24,10 @@ const AdminNews: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
+  // Filter State
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
   useEffect(() => {
     loadNews();
   }, []);
@@ -37,6 +41,20 @@ const AdminNews: React.FC = () => {
       
       setRejectedNews(db.getRejectedNews());
   };
+
+  // Filter Logic for Active News
+  const filteredActiveNews = activeNews.filter(item => {
+      if (!startDate && !endDate) return true;
+      
+      const itemDate = new Date(item.createdAt).getTime();
+      const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : null;
+      const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : null;
+
+      if (start && itemDate < start) return false;
+      if (end && itemDate > end) return false;
+      
+      return true;
+  });
 
   const handleDelete = (id: string, fromRejected = false) => {
     if (window.confirm('Tem certeza que deseja excluir esta notícia permanentemente?')) {
@@ -213,7 +231,12 @@ const AdminNews: React.FC = () => {
         return;
     }
     if (!currentNews.source) {
-        setValidationError("Erro: Citar a Fonte é obrigatório.");
+        setValidationError("Erro: Citar a Fonte (Nome) é obrigatório.");
+        window.scrollTo(0,0);
+        return;
+    }
+    if (!currentNews.sourceUrl) {
+        setValidationError("Erro: Link da Fonte (URL) é obrigatório para verificação.");
         window.scrollTo(0,0);
         return;
     }
@@ -246,6 +269,11 @@ const AdminNews: React.FC = () => {
   };
 
   const handleQuickPublish = (item: NewsItem) => {
+      // Validação Extra ao Publicar via Lista
+      if (!item.sourceUrl) {
+          alert("ERRO: Esta notícia não tem Link da Fonte. Edite e adicione a URL antes de publicar.");
+          return;
+      }
       const updated = { ...item, published: true };
       db.saveNewsItem(updated);
       loadNews();
@@ -356,7 +384,7 @@ const AdminNews: React.FC = () => {
                     </div>
 
                     <div>
-                         <label className="block text-sm font-bold text-gray-700 mb-1">Fonte da Notícia</label>
+                         <label className="block text-sm font-bold text-gray-700 mb-1">Nome da Fonte</label>
                          <input 
                             value={currentNews.source || ''} 
                             onChange={e => setCurrentNews({...currentNews, source: e.target.value})} 
@@ -364,6 +392,20 @@ const AdminNews: React.FC = () => {
                             placeholder="Ex: Prefeitura Municipal"
                         />
                     </div>
+                </div>
+
+                <div className="bg-blue-50 p-4 rounded border border-blue-200">
+                     <label className="block text-sm font-bold text-blue-900 mb-1 flex items-center gap-2">
+                        <LinkIcon size={16} /> Link Original da Fonte (URL) - Obrigatório
+                     </label>
+                     <input 
+                        type="url"
+                        value={currentNews.sourceUrl || ''} 
+                        onChange={e => setCurrentNews({...currentNews, sourceUrl: e.target.value})} 
+                        className="w-full p-2 border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                        placeholder="https://..."
+                    />
+                    <p className="text-xs text-blue-700 mt-1">O link é necessário para verificação de autenticidade.</p>
                 </div>
 
                 {/* 3. CONTENT */}
@@ -401,21 +443,18 @@ const AdminNews: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col md:flex-row gap-4 pt-6 border-t border-gray-100">
-                     <button onClick={(e) => handleSave(e, false)} className="flex-1 bg-yellow-400 text-blue-900 font-bold py-3 rounded-lg hover:bg-yellow-500 transition flex justify-center items-center gap-2 shadow-sm">
-                        <FileEdit size={20} /> Salvar na Curadoria (Rascunho)
-                     </button>
-                     
-                     <button onClick={(e) => handleSave(e, true)} className="flex-1 bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition flex justify-center items-center gap-2 shadow-sm">
-                        <Save size={20} /> Publicar no Site Agora
+                     <button onClick={(e) => handleSave(e, false)} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition flex justify-center items-center gap-2 shadow-sm">
+                        <Save size={20} /> Salvar para Aprovação (Curadoria)
                      </button>
                      
                      <button type="button" onClick={() => setIsEditing(false)} className="px-6 border border-gray-300 text-gray-600 font-bold rounded-lg hover:bg-gray-50 transition">
                         Cancelar
                      </button>
                 </div>
-                <p className="text-center text-xs text-gray-400">
-                    * "Salvar na Curadoria" deixa a notícia invisível no site, permitindo revisão posterior.
-                </p>
+                <div className="bg-yellow-50 text-yellow-800 text-xs p-3 rounded border border-yellow-200 text-center flex items-center justify-center gap-2">
+                    <AlertTriangle size={14} />
+                    <strong>Regra de Publicação:</strong> Não é permitido publicar diretamente. A notícia ficará salva na aba "Curadoria" aguardando aprovação final.
+                </div>
             </form>
         </div>
     );
@@ -473,40 +512,89 @@ const AdminNews: React.FC = () => {
             
             {/* VIEW MODE: PUBLISHED */}
             {viewMode === 'active' && (
-                 activeNews.length === 0 ? (
-                     <div className="p-8 text-center text-gray-400">Nenhuma notícia publicada.</div>
-                 ) : (
-                     <div className="divide-y divide-gray-100">
-                         {activeNews.map(item => (
-                             <div key={item.id} className="p-4 flex gap-4 hover:bg-gray-50 transition">
-                                 <img src={item.imageUrl} className="w-24 h-24 object-cover rounded-lg bg-gray-200 flex-shrink-0" />
-                                 <div className="flex-1 min-w-0">
-                                     <div className="flex items-center gap-2 mb-1">
-                                         <span className="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase flex items-center gap-1">
-                                            <CheckCircle size={10} /> Publicada
-                                         </span>
-                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                                             item.category === 'Treze de Maio - SC' ? 'bg-blue-100 text-blue-800' :
-                                             'bg-gray-100 text-gray-800'
-                                         }`}>{item.category}</span>
-                                         <span className="text-xs text-gray-400 flex items-center gap-1"><Calendar size={10} /> {new Date(item.createdAt).toLocaleDateString()}</span>
-                                     </div>
-                                     <h3 className="font-bold text-gray-800 truncate">{item.title}</h3>
-                                     <p className="text-sm text-gray-500 line-clamp-2 mt-1">{item.excerpt}</p>
-                                 </div>
-                                 <div className="flex flex-col gap-2 justify-center">
-                                     <button onClick={() => handleUnpublish(item)} className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold rounded hover:bg-yellow-200" title="Mover para Curadoria">
-                                        Despublicar
-                                     </button>
-                                     <div className="flex gap-1 justify-end">
-                                        <button onClick={() => handleEdit(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Edit size={18} /></button>
-                                        <button onClick={() => handleDelete(item.id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Trash2 size={18} /></button>
-                                     </div>
-                                 </div>
-                             </div>
-                         ))}
+                 <>
+                     {/* FILTER BAR */}
+                     <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-wrap items-center gap-4">
+                        <div className="text-sm font-bold text-gray-500 flex items-center gap-2">
+                            <Filter size={16} /> Filtrar por Data:
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="relative">
+                                <input 
+                                    type="date" 
+                                    value={startDate} 
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="pl-8 pr-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                                <Calendar size={14} className="absolute left-2.5 top-2.5 text-gray-400 pointer-events-none" />
+                            </div>
+                            <span className="text-gray-400 text-xs">até</span>
+                            <div className="relative">
+                                <input 
+                                    type="date" 
+                                    value={endDate} 
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="pl-8 pr-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                                <Calendar size={14} className="absolute left-2.5 top-2.5 text-gray-400 pointer-events-none" />
+                            </div>
+                        </div>
+                        
+                        {(startDate || endDate) && (
+                            <button 
+                                onClick={() => { setStartDate(''); setEndDate(''); }}
+                                className="text-red-500 text-xs font-bold hover:underline flex items-center gap-1"
+                            >
+                                <X size={12} /> Limpar Filtros
+                            </button>
+                        )}
+
+                        <div className="ml-auto text-xs font-bold text-gray-500">
+                            Exibindo {filteredActiveNews.length} de {activeNews.length}
+                        </div>
                      </div>
-                 )
+
+                     {filteredActiveNews.length === 0 ? (
+                         <div className="p-8 text-center text-gray-400 flex flex-col items-center">
+                             <Search size={32} className="mb-2 opacity-50" />
+                             Nenhuma notícia encontrada com os filtros selecionados.
+                         </div>
+                     ) : (
+                         <div className="divide-y divide-gray-100">
+                             {filteredActiveNews.map(item => (
+                                 <div key={item.id} className="p-4 flex gap-4 hover:bg-gray-50 transition">
+                                     <img src={item.imageUrl} className="w-24 h-24 object-cover rounded-lg bg-gray-200 flex-shrink-0" />
+                                     <div className="flex-1 min-w-0">
+                                         <div className="flex items-center gap-2 mb-1">
+                                             <span className="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase flex items-center gap-1">
+                                                <CheckCircle size={10} /> Publicada
+                                             </span>
+                                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                                                 item.category === 'Treze de Maio - SC' ? 'bg-blue-100 text-blue-800' :
+                                                 'bg-gray-100 text-gray-800'
+                                             }`}>{item.category}</span>
+                                             <span className="text-xs text-gray-400 flex items-center gap-1"><Calendar size={10} /> {new Date(item.createdAt).toLocaleDateString()}</span>
+                                         </div>
+                                         <h3 className="font-bold text-gray-800 truncate">{item.title}</h3>
+                                         <p className="text-sm text-gray-500 line-clamp-2 mt-1">{item.excerpt}</p>
+                                         {!item.sourceUrl && (
+                                             <span className="text-xs text-red-500 font-bold flex items-center gap-1 mt-1"><AlertTriangle size={10} /> REQUER LINK DA FONTE</span>
+                                         )}
+                                     </div>
+                                     <div className="flex flex-col gap-2 justify-center">
+                                         <button onClick={() => handleUnpublish(item)} className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold rounded hover:bg-yellow-200" title="Mover para Curadoria">
+                                            Despublicar
+                                         </button>
+                                         <div className="flex gap-1 justify-end">
+                                            <button onClick={() => handleEdit(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Edit size={18} /></button>
+                                            <button onClick={() => handleDelete(item.id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Trash2 size={18} /></button>
+                                         </div>
+                                     </div>
+                                 </div>
+                             ))}
+                         </div>
+                     )}
+                 </>
             )}
 
             {/* VIEW MODE: CURATION (DRAFTS) */}
@@ -536,6 +624,9 @@ const AdminNews: React.FC = () => {
                                          </div>
                                          <h3 className="font-bold text-gray-800 truncate">{item.title}</h3>
                                          <p className="text-sm text-gray-500 line-clamp-2 mt-1">{item.excerpt}</p>
+                                         {!item.sourceUrl && (
+                                             <span className="text-xs text-red-500 font-bold flex items-center gap-1 mt-1"><AlertTriangle size={10} /> REQUER LINK DA FONTE</span>
+                                         )}
                                      </div>
                                      <div className="flex flex-col gap-2 justify-center min-w-[140px]">
                                          <button onClick={() => handleQuickPublish(item)} className="px-3 py-2 bg-green-600 text-white text-xs font-bold rounded hover:bg-green-700 shadow-sm flex items-center justify-center gap-1">

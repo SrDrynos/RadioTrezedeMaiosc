@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { db } from '../../services/db';
 import { SiteSettings, TVItem } from '../../types';
 import { Tv, Radio, AlertTriangle, Volume2, VolumeX, Lock } from 'lucide-react';
@@ -9,23 +9,39 @@ const TV: React.FC = () => {
   const [playlist, setPlaylist] = useState<TVItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(true);
+  
+  // Referência para controlar o Player do YouTube via API
+  const playerRef = useRef<any>(null);
 
   useEffect(() => {
     const loadData = () => {
         const s = db.getSettings();
         setSettings(s);
-        if (s.tvPlaylist) setPlaylist(s.tvPlaylist);
+        if (s.tvPlaylist && s.tvPlaylist.length > 0) {
+            setPlaylist(s.tvPlaylist);
+        }
     };
     loadData();
     window.addEventListener('radio-settings-update', loadData);
+    
+    // Carregar API do YouTube apenas uma vez
+    if (!(window as any).YT) {
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+    }
+
     return () => window.removeEventListener('radio-settings-update', loadData);
   }, []);
 
+  // Lógica para avançar vídeo (Loop Infinito)
   const handleNextVideo = () => {
-      setCurrentIndex((prev) => (prev + 1) % playlist.length);
+      setCurrentIndex((prev) => {
+          const nextIndex = (prev + 1) % playlist.length;
+          return nextIndex;
+      });
   };
-
-  if (!settings) return null;
 
   const currentItem = playlist[currentIndex];
 
@@ -39,13 +55,89 @@ const TV: React.FC = () => {
   }
   
   const videoId = currentItem ? getYoutubeId(currentItem.url) : '';
-  const isYoutube = !!videoId; // Detecta se é YT ou Arquivo Nativo
-  
-  // Configuração para YouTube
-  // Controls=0 para dificultar pular pelo player do YT
-  const embedUrl = isYoutube 
-    ? `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=${isMuted ? 1 : 0}&controls=0&modestbranding=1&rel=0&showinfo=0&fs=1&disablekb=1&origin=${window.location.origin}`
-    : '';
+  const isYoutube = !!videoId; 
+
+  // Efeito para Gerenciar o Player do YouTube (Criação e Troca de Vídeo)
+  useEffect(() => {
+      if (!isYoutube || !videoId) return;
+
+      const onPlayerStateChange = (event: any) => {
+          // YT.PlayerState.ENDED === 0
+          if (event.data === 0) {
+              handleNextVideo();
+          }
+      };
+
+      const initPlayer = () => {
+          // Se já existe um player, apenas carrega o novo vídeo para transição rápida
+          if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
+              playerRef.current.loadVideoById({
+                  videoId: videoId,
+                  startSeconds: 0
+              });
+              if(isMuted) playerRef.current.mute(); 
+              else playerRef.current.unMute();
+              return;
+          }
+
+          // Se não existe, cria do zero
+          // @ts-ignore
+          if (window.YT && window.YT.Player) {
+              // @ts-ignore
+              playerRef.current = new window.YT.Player('fluxx-yt-player', {
+                  height: '100%',
+                  width: '100%',
+                  videoId: videoId,
+                  playerVars: {
+                      'autoplay': 1,
+                      'controls': 0, // Esconde controles para parecer TV
+                      'rel': 0,
+                      'fs': 0,
+                      'modestbranding': 1,
+                      'mute': isMuted ? 1 : 0,
+                      'iv_load_policy': 3 // Esconde anotações
+                  },
+                  events: {
+                      'onReady': (event: any) => {
+                          event.target.playVideo();
+                      },
+                      'onStateChange': onPlayerStateChange
+                  }
+                  
+              });
+          }
+      };
+
+      // Tenta inicializar. Se a API não estiver pronta, o callback global do YT cuidará disso.
+      // @ts-ignore
+      if (window.YT && window.YT.Player) {
+          initPlayer();
+      } else {
+          // @ts-ignore
+          window.onYouTubeIframeAPIReady = initPlayer;
+      }
+
+  }, [videoId, isYoutube]); // Recria/Atualiza quando o ID do vídeo muda
+
+  // Sincronizar Mute/Unmute com o Player YT
+  useEffect(() => {
+      if (playerRef.current && typeof playerRef.current.mute === 'function') {
+          if (isMuted) playerRef.current.mute();
+          else playerRef.current.unMute();
+      }
+  }, [isMuted]);
+
+  // Se mudar para vídeo nativo (não YT), destrói o player YT para limpar memória
+  useEffect(() => {
+      if (!isYoutube && playerRef.current) {
+          try {
+            playerRef.current.destroy();
+            playerRef.current = null;
+          } catch(e) {}
+      }
+  }, [isYoutube]);
+
+  if (!settings) return null;
 
   const isOnline = settings.tvEnabled && playlist.length > 0;
 
@@ -83,21 +175,12 @@ const TV: React.FC = () => {
                      <div className="bg-black aspect-video rounded-xl overflow-hidden shadow-2xl border border-slate-700 relative group">
                          
                          {isYoutube ? (
-                             // PLAYER YOUTUBE
+                             // PLAYER YOUTUBE (API CONTAINER)
                              <div className="w-full h-full transform scale-[1.35] origin-center pointer-events-none">
-                                <iframe 
-                                    key={`${currentItem.id}-${isMuted}`} 
-                                    src={embedUrl}
-                                    className="w-full h-full"
-                                    title="TV Player"
-                                    frameBorder="0"
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
-                                    allowFullScreen
-                                ></iframe>
+                                <div id="fluxx-yt-player" className="w-full h-full"></div>
                              </div>
                          ) : currentItem?.url ? (
                              // PLAYER NATIVO (MP4/UPLOAD)
-                             // Controls removed to prevent skipping
                              <video
                                 key={currentItem.id}
                                 src={currentItem.url}
@@ -107,8 +190,11 @@ const TV: React.FC = () => {
                                 controls={false} 
                                 playsInline
                                 onEnded={handleNextVideo}
-                                onError={(e) => console.log("Erro no video", e)}
-                                style={{ pointerEvents: 'none' }} // Disable clicking on video
+                                onError={(e) => {
+                                    console.log("Erro no video, pulando...", e);
+                                    handleNextVideo();
+                                }}
+                                style={{ pointerEvents: 'none' }}
                              >
                                  Seu navegador não suporta este vídeo.
                              </video>
@@ -121,7 +207,7 @@ const TV: React.FC = () => {
 
                          {/* Overlays */}
                          <div className="absolute top-4 left-4 flex gap-2 pointer-events-none z-20">
-                             {currentItem.type === 'live' && (
+                             {currentItem?.type === 'live' && (
                                 <div className="bg-red-600/90 text-white text-xs font-bold px-3 py-1 rounded shadow backdrop-blur-sm animate-pulse">
                                     ● TRANSMISSÃO AO VIVO
                                 </div>
@@ -150,13 +236,15 @@ const TV: React.FC = () => {
                         )}
                      </div>
 
-                     <div className="border-l-4 border-blue-600 pl-4">
-                         <h2 className="text-2xl font-bold leading-tight">{currentItem.title}</h2>
-                         <div className="flex items-center gap-2 mt-2 text-sm">
-                             <span className="bg-gray-800 text-gray-300 px-2 py-0.5 rounded uppercase font-bold text-xs">{currentItem.type}</span>
-                             <span className="text-slate-400">Fonte: {currentItem.duration === 'Ao Vivo' ? 'Ao Vivo' : currentItem.duration}</span>
-                         </div>
-                     </div>
+                     {currentItem && (
+                        <div className="border-l-4 border-blue-600 pl-4">
+                            <h2 className="text-2xl font-bold leading-tight">{currentItem.title}</h2>
+                            <div className="flex items-center gap-2 mt-2 text-sm">
+                                <span className="bg-gray-800 text-gray-300 px-2 py-0.5 rounded uppercase font-bold text-xs">{currentItem.type}</span>
+                                <span className="text-slate-400">Fonte: {currentItem.duration === 'Ao Vivo' ? 'Ao Vivo' : currentItem.duration}</span>
+                            </div>
+                        </div>
+                     )}
                 </div>
 
                 {/* Playlist Sidebar (Non-Interactive EPG style) */}
