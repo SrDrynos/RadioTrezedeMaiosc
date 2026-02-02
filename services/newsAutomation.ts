@@ -74,12 +74,21 @@ export const newsAutomationService = {
 
     for (const url of urls) {
        try {
-         const xmlText = await fetchRawRSS(url);
-         if (!xmlText) continue;
+         // USA O PROXY LOCAL PHP - SOLUÇÃO ROBUSTA PARA PRODUÇÃO
+         const proxyUrl = `./rss_proxy.php?url=${encodeURIComponent(url)}`;
+         
+         const res = await fetch(proxyUrl);
+         if (!res.ok) throw new Error("Falha no proxy");
+         
+         const xmlText = await res.text();
+         if (!xmlText || xmlText.trim().length === 0) continue;
 
          const parser = new DOMParser();
          const xmlDoc = parser.parseFromString(xmlText, "text/xml");
          
+         // Verifica erro de parsing XML
+         if (xmlDoc.querySelector("parsererror")) continue;
+
          const feedTitle = xmlDoc.querySelector("channel > title")?.textContent || "Internet";
          const items = Array.from(xmlDoc.querySelectorAll("item"));
 
@@ -158,13 +167,13 @@ export const newsAutomationService = {
          }
 
        } catch(e) {
-         // Error handled silently
+         console.error(`Erro ao processar RSS: ${url}`, e);
        }
     }
     
     return { 
         count: addedCount, 
-        message: `${addedCount} aprovadas para Curadoria (Score > 7.5). ${rejectedCount} rejeitadas.` 
+        message: `${addedCount} aprovadas para Curadoria. ${rejectedCount} rejeitadas.` 
     };
   }
 };

@@ -1,0 +1,47 @@
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # 1. FORÇAR HTTPS (Obrigatório para o GPS funcionar)
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # 2. ROTEAMENTO REACT (Prevenção de Erro 404 ao atualizar página)
+    # Se o arquivo/pasta não existir, manda pro index.html
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.html [QSA,L]
+</IfModule>
+
+# 3. AUMENTAR LIMITES DO PHP (Evita erro ao salvar notícias com fotos)
+# Padrão de hospedagem é 2MB, aumentamos para 32MB
+<IfModule mod_php7.c>
+    php_value upload_max_filesize 32M
+    php_value post_max_size 32M
+    php_value memory_limit 256M
+    php_value max_execution_time 300
+    php_value max_input_time 300
+</IfModule>
+<IfModule mod_php.c>
+    php_value upload_max_filesize 32M
+    php_value post_max_size 32M
+    php_value memory_limit 256M
+</IfModule>
+
+# 4. DESATIVAR CACHE PARA ARQUIVOS JSON E API
+# Garante que o painel mostre dados em tempo real
+<FilesMatch "\.(json|php)$">
+    FileETag None
+    <IfModule mod_headers.c>
+        Header unset ETag
+        Header set Cache-Control "max-age=0, no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires "Wed, 11 Jan 1984 05:00:00 GMT"
+        # Liberar CORS geral para as APIs
+        Header set Access-Control-Allow-Origin "*"
+    </IfModule>
+</FilesMatch>
+
+# 5. SEGURANÇA BÁSICA
+# Impede listagem de pastas (ninguém vê seus arquivos soltos)
+Options -Indexes

@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { db } from '../../services/db';
 import { ListenerSession } from '../../types';
 import { 
-    Music, Users, Activity, Radio, Mic2, Server, MapPin, Laptop, Signal, Navigation, Target, Globe, Wifi, RefreshCw, AlertTriangle, Monitor, Smartphone, Search
+    Music, Users, Activity, Radio, Mic2, Server, MapPin, Laptop, Signal, Navigation, Target, Globe, Wifi, RefreshCw, AlertTriangle, Monitor, Smartphone, Search, X, Clock, Shield, Info, ChevronRight
 } from 'lucide-react';
 
 interface StreamData {
@@ -52,6 +52,9 @@ const AdminDashboard: React.FC = () => {
   // Web Sessions (Real Tracked Users from Server)
   const [activeSessions, setActiveSessions] = useState<ListenerSession[]>([]);
 
+  // Selection State for Side Panel
+  const [selectedSession, setSelectedSession] = useState<ListenerSession | null>(null);
+
   useEffect(() => {
     // 1. Start Systems
     initializeGPS();
@@ -82,12 +85,8 @@ const AdminDashboard: React.FC = () => {
               
               // Reverse Geocoding (Lat/Lng -> Endereço Real)
               try {
-                  // Using OpenStreetMap Nominatim for detailed address with Portuguese Language enforced
-                  const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1&accept-language=pt-BR`, {
-                      headers: {
-                          'User-Agent': 'RadioTrezeDeMaioApp/1.0' // Boa prática para API do OSM
-                      }
-                  });
+                  // USA O PROXY PHP LOCAL PARA EVITAR CORS E BLOQUEIO DE USER-AGENT EM PRODUÇÃO
+                  const geoRes = await fetch(`./geo_proxy.php?lat=${latitude}&lon=${longitude}`);
                   
                   if (!geoRes.ok) throw new Error("Falha na API de Mapas");
 
@@ -158,6 +157,8 @@ const AdminDashboard: React.FC = () => {
 
   const fallbackToIP = async () => {
       try {
+          // IP fallback também via fetch direto pode falhar em alguns hosts, 
+          // mas ipwho.is geralmente tem CORS liberado.
           const ipRes = await fetch('https://ipwho.is/');
           const ipData = await ipRes.json();
           
@@ -183,11 +184,12 @@ const AdminDashboard: React.FC = () => {
 
   // Allows admin to click on a listener and see their location on map
   const trackListener = (session: ListenerSession) => {
+      // 1. Update Map Focus
       setLocation({
           method: 'IP',
           lat: session.lat,
           lng: session.lng,
-          accuracy: 1000,
+          accuracy: 2000, // IP accuracy usually 2-5km
           street: "Ouvinte Web",
           number: "IP Rastreável",
           neighborhood: "Acesso via Site",
@@ -197,20 +199,21 @@ const AdminDashboard: React.FC = () => {
           isp: String(session.isp),
           ip: session.ip
       });
-      // Scroll top
+      
+      // 2. Open Side Panel Details
+      setSelectedSession(session);
+
+      // 3. Scroll top slightly to show map if needed, but smooth
       window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const fetchStreamData = async () => {
     try {
-        const apiUrl = 'http://radio.linknacional.com/api-json/Njk4Misx';
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`;
-        
-        // Execute Stream Fetch in parallel with Logs
-        const resStream = fetch(proxyUrl);
+        // --- USA O PROXY LOCAL (stream_proxy.php) ---
+        // Isso resolve o problema de CORS e HTTPS
+        const resStream = fetch('./stream_proxy.php?t=' + Date.now());
         
         // --- FETCH REAL LISTENERS FROM PHP SERVER LOG ---
-        // Adiciona timestamp para furar o cache do navegador e pegar dados REAIS
         const resLogs = fetch('./listeners_log.json?t=' + Date.now()); 
 
         const [res, logRes] = await Promise.all([resStream, resLogs]);
@@ -291,8 +294,99 @@ const AdminDashboard: React.FC = () => {
   const unknownListenersCount = Math.max(0, listeners - activeSessions.length);
 
   return (
-    <div className="space-y-6 font-sans pb-10">
+    <div className="space-y-6 font-sans pb-10 relative">
         
+        {/* SIDE PANEL (SLIDE OVER) */}
+        {selectedSession && (
+            <div className="fixed inset-y-0 right-0 z-50 w-full md:w-96 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out border-l border-slate-200 flex flex-col animate-in slide-in-from-right">
+                <div className="p-6 bg-slate-900 text-white flex justify-between items-start">
+                    <div>
+                        <h2 className="text-xl font-bold flex items-center gap-2">
+                             {selectedSession.device === 'Celular' ? <Smartphone size={20} /> : <Monitor size={20} />}
+                             Detalhes da Sessão
+                        </h2>
+                        <p className="text-slate-400 text-xs mt-1 font-mono">{selectedSession.id}</p>
+                    </div>
+                    <button onClick={() => setSelectedSession(null)} className="text-slate-400 hover:text-white bg-white/10 p-1.5 rounded-full transition">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    {/* Status Card */}
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+                         <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                         <div>
+                             <p className="text-green-800 font-bold text-sm">Sessão Ativa</p>
+                             <p className="text-green-600 text-xs">Ouvinte conectado ao site agora.</p>
+                         </div>
+                    </div>
+
+                    {/* Location Info */}
+                    <div className="space-y-3">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Localização (IP)</h3>
+                        <div className="flex items-start gap-3">
+                            <MapPin className="text-blue-500 mt-1" size={18} />
+                            <div>
+                                <p className="font-bold text-slate-800">{selectedSession.city}</p>
+                                <p className="text-slate-500 text-sm">{selectedSession.region}, {selectedSession.country}</p>
+                                <p className="text-xs text-slate-400 mt-1">Lat: {selectedSession.lat}, Lng: {selectedSession.lng}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Technical Info */}
+                    <div className="space-y-3">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Dados Técnicos</h3>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-slate-50 p-3 rounded border border-slate-100">
+                                <p className="text-xs text-slate-400 font-bold mb-1">PROVEDOR (ISP)</p>
+                                <div className="flex items-center gap-2">
+                                    <Wifi size={14} className="text-slate-500" />
+                                    <span className="text-sm font-semibold text-slate-700 truncate block w-full" title={selectedSession.isp}>{selectedSession.isp}</span>
+                                </div>
+                            </div>
+                            <div className="bg-slate-50 p-3 rounded border border-slate-100">
+                                <p className="text-xs text-slate-400 font-bold mb-1">DISPOSITIVO</p>
+                                <div className="flex items-center gap-2">
+                                    {selectedSession.device === 'Celular' ? <Smartphone size={14} className="text-purple-500" /> : <Monitor size={14} className="text-blue-500" />}
+                                    <span className="text-sm font-semibold text-slate-700">{selectedSession.device}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded border border-slate-100">
+                             <p className="text-xs text-slate-400 font-bold mb-1">ENDEREÇO IP</p>
+                             <div className="flex items-center gap-2">
+                                 <Shield size={14} className="text-slate-500" />
+                                 <span className="font-mono text-sm text-slate-700">{selectedSession.ip}</span>
+                             </div>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded border border-slate-100">
+                             <p className="text-xs text-slate-400 font-bold mb-1">CONECTADO EM</p>
+                             <div className="flex items-center gap-2">
+                                 <Clock size={14} className="text-slate-500" />
+                                 <span className="text-sm text-slate-700">
+                                     {new Date(selectedSession.connectedAt).toLocaleString()}
+                                 </span>
+                             </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div className="p-4 border-t border-slate-200 bg-slate-50">
+                    <button 
+                        onClick={() => setSelectedSession(null)}
+                        className="w-full bg-slate-800 text-white font-bold py-3 rounded-lg hover:bg-slate-700 transition shadow-lg"
+                    >
+                        Fechar Detalhes
+                    </button>
+                </div>
+            </div>
+        )}
+
         {/* TOP STATUS BAR */}
         <div className="bg-slate-900 text-white p-4 rounded-xl shadow-lg flex flex-col md:flex-row justify-between items-center gap-4 border border-slate-700">
             <div className="flex items-center gap-3">
@@ -362,7 +456,7 @@ const AdminDashboard: React.FC = () => {
                             ></iframe>
                             
                             {/* PRECISION OVERLAY */}
-                            <div className="absolute top-4 left-4 bg-black/80 text-white p-3 rounded-lg backdrop-blur-md border border-white/10 shadow-xl max-w-xs">
+                            <div className="absolute top-4 left-4 bg-black/80 text-white p-3 rounded-lg backdrop-blur-md border border-white/10 shadow-xl max-w-xs pointer-events-none">
                                 <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 flex items-center gap-1 ${location.method === 'GPS' ? 'text-green-400' : 'text-yellow-400'}`}>
                                     <Signal size={10} /> Precisão: {location.accuracy ? `+/- ${location.accuracy}m` : 'Baixa (IP)'}
                                 </div>
@@ -493,9 +587,9 @@ const AdminDashboard: React.FC = () => {
             <table className="w-full text-left">
                 <thead className="bg-white text-slate-500 text-[10px] uppercase tracking-wider font-bold border-b border-slate-200">
                     <tr>
-                        <th className="px-6 py-4">Dispositivo / Tipo</th>
-                        <th className="px-6 py-4">Endereço / Cidade</th>
-                        <th className="px-6 py-4">Status de Rastreio</th>
+                        <th className="px-6 py-4">Dispositivo</th>
+                        <th className="px-6 py-4">Localização & ISP</th>
+                        <th className="px-6 py-4">Tipo Conexão</th>
                         <th className="px-6 py-4 text-right">Ação</th>
                     </tr>
                 </thead>
@@ -506,15 +600,12 @@ const AdminDashboard: React.FC = () => {
                          <tr key={session.id} className="hover:bg-blue-50 transition cursor-pointer group" onClick={() => trackListener(session)}>
                             <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
-                                    <div className="bg-blue-100 p-2 rounded-full text-blue-700 shadow-sm">
-                                        {session.device === 'Celular' ? <Smartphone size={18} /> : <Monitor size={18} />}
+                                    <div className={`p-2 rounded-full shadow-sm text-white ${session.device === 'Celular' ? 'bg-purple-500' : 'bg-blue-500'}`}>
+                                        {session.device === 'Celular' ? <Smartphone size={16} /> : <Monitor size={16} />}
                                     </div>
                                     <div>
-                                        <div className="font-black text-slate-800">Ouvinte Web #{idx + 1}</div>
-                                        <div className="text-xs text-slate-500 font-mono flex items-center gap-1">
-                                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                                            Acesso pelo Site
-                                        </div>
+                                        <div className="font-bold text-slate-800">{session.device}</div>
+                                        <div className="text-xs text-slate-500 font-mono">ID: {session.id.substring(0,6)}...</div>
                                     </div>
                                 </div>
                             </td>
@@ -522,18 +613,18 @@ const AdminDashboard: React.FC = () => {
                                 <div className="font-bold text-slate-800">
                                     {session.city}, {session.region}
                                 </div>
-                                <div className="text-xs text-slate-500 mt-0.5">
-                                    ISP: {session.isp}
+                                <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                                    <Wifi size={10} /> {session.isp}
                                 </div>
                             </td>
                             <td className="px-6 py-4">
                                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold">
-                                    <Target size={12} /> RASTREADO (IP)
+                                    <Globe size={12} /> REDE / IP
                                 </span>
                             </td>
                             <td className="px-6 py-4 text-right">
-                                <button className="inline-flex items-center gap-1 text-white bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs font-bold transition">
-                                    <Search size={12} /> RASTREAR
+                                <button className="inline-flex items-center gap-1 text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm">
+                                    <Search size={12} /> DETALHES
                                 </button>
                             </td>
                         </tr>
@@ -545,28 +636,28 @@ const AdminDashboard: React.FC = () => {
                             <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
                                     <div className="bg-slate-100 p-2 rounded-full text-slate-400">
-                                        <Radio size={18} />
+                                        <Radio size={16} />
                                     </div>
                                     <div>
-                                        <div className="font-bold text-slate-600">Ouvinte Remoto #{idx + 1}</div>
-                                        <div className="text-xs text-slate-400 font-mono">App Externo / Player Direto</div>
+                                        <div className="font-bold text-slate-600">Player Remoto</div>
+                                        <div className="text-xs text-slate-400 font-mono">Desconhecido</div>
                                     </div>
                                 </div>
                             </td>
                             <td className="px-6 py-4">
                                 <div className="font-medium text-slate-400 italic">Localização Oculta</div>
-                                <div className="text-xs text-slate-400 mt-1 max-w-[200px] leading-tight">
-                                    Conectado diretamente ao servidor de áudio (Sem GPS).
+                                <div className="text-xs text-slate-400 mt-1">
+                                    Sem dados de GPS/IP
                                 </div>
                             </td>
                             <td className="px-6 py-4">
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 border border-slate-200 text-slate-500 text-xs font-bold">
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 border border-gray-200 text-gray-500 text-xs font-bold">
                                     <Server size={12} /> STREAM
                                 </span>
                             </td>
                             <td className="px-6 py-4 text-right">
                                 <div className="inline-flex items-center gap-1 text-slate-400 font-bold text-xs">
-                                    <Signal size={12} /> ONLINE
+                                    <Info size={12} /> SÓ ÁUDIO
                                 </div>
                             </td>
                         </tr>
@@ -574,8 +665,9 @@ const AdminDashboard: React.FC = () => {
 
                     {listeners === 0 && (
                          <tr>
-                            <td colSpan={4} className="p-8 text-center text-slate-400">
-                                Nenhuma conexão ativa detectada no momento.
+                            <td colSpan={4} className="p-12 text-center text-slate-400 flex flex-col items-center justify-center w-full">
+                                <Signal size={48} className="mb-4 opacity-20" />
+                                <p>Nenhuma conexão ativa detectada no momento.</p>
                             </td>
                         </tr>
                     )}

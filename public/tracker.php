@@ -1,3 +1,4 @@
+
 <?php
 // Configurações de CORS para permitir chamadas do React
 header("Access-Control-Allow-Origin: *");
@@ -6,6 +7,12 @@ header("Access-Control-Allow-Methods: GET, POST");
 
 // Arquivo onde os logs serão salvos
 $logFile = 'listeners_log.json';
+
+// Tenta criar o arquivo se não existir (Evita erro 500 no primeiro uso)
+if (!file_exists($logFile)) {
+    @file_put_contents($logFile, '[]');
+    @chmod($logFile, 0666); // Permissão de escrita para todos (Necessário em alguns hosts)
+}
 
 // 1. Capturar IP Real do Cliente
 function get_client_ip() {
@@ -38,7 +45,7 @@ function get_client_ip() {
 $ip = get_client_ip();
 
 // 2. Consultar API de Geolocalização (Server-side para evitar erro de Mixed Content HTTPS/HTTP)
-// IP-API.com é gratuita para uso não comercial (até 45 req/min)
+// Usamos ipwho.is (suporta HTTPS melhor que ip-api free)
 $apiUrl = "http://ip-api.com/json/{$ip}?fields=status,message,country,countryCode,regionName,city,lat,lon,isp,query";
 
 $ch = curl_init();
@@ -76,10 +83,6 @@ if ($geoData && isset($geoData['status']) && $geoData['status'] == 'success') {
         }
     }
 
-    // ALTERADO: Não filtramos mais IPs duplicados agressivamente. 
-    // Isso permite que você teste com 2 abas ou 2 dispositivos na mesma rede WiFi.
-    // Apenas limitamos o tamanho total da lista para não ficar gigante.
-    
     // Adiciona novo no topo
     array_unshift($currentData, $newSession);
 
